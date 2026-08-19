@@ -1,0 +1,123 @@
+{
+  "name": "agmen-stream-inspector",
+  "displayName": "Agmen Stream Inspector for Redis",
+  "description": "Free and open-source tools to inspect, search, monitor, and replay Redis Streams",
+  "version": "1.1.1",
+  "publisher": "AgmenSoftware",
+  "license": "MIT",
+  "icon": "resources/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cristianofx/agmen-stream-inspector-vscode-oss.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cristianofx/agmen-stream-inspector-vscode-oss/issues"
+  },
+  "homepage": "https://github.com/cristianofx/agmen-stream-inspector-vscode-oss#readme",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "redis",
+    "streams",
+    "inspector",
+    "monitor",
+    "search"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "redisInspector",
+          "title": "Agmen Stream Inspector",
+          "icon": "resources/redis-inspector.svg"
+        }
+      ]
+    },
+    "views": {
+      "redisInspector": [
+        {
+          "id": "redisInspector.welcome",
+          "name": "Agmen Stream Inspector",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "redisInspector.open",
+        "title": "Agmen Stream Inspector: Open",
+        "icon": "$(search)"
+      },
+      {
+        "command": "redisInspector.addConnection",
+        "title": "Agmen Stream Inspector: Add Connection"
+      },
+      {
+        "command": "redisInspector.exportJson",
+        "title": "Agmen Stream Inspector: Export Results (JSON)"
+      },
+      {
+        "command": "redisInspector.exportCsv",
+        "title": "Agmen Stream Inspector: Export Results (CSV)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "redisInspector.open",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r"
+      }
+    ],
+    "configuration": {
+      "title": "Agmen Stream Inspector",
+      "properties": {
+        "redisInspector.defaultJsonField": {
+          "type": "string",
+          "default": "message",
+          "description": "Default stream field name containing the JSON payload"
+        },
+        "redisInspector.pollIntervalMs": {
+          "type": "number",
+          "default": 100,
+          "minimum": 50,
+          "maximum": 5000,
+          "description": "Watch mode polling interval in milliseconds"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.js --production",
+    "watch": "node esbuild.js --watch",
+    "lint": "eslint src --ext ts",
+    "test": "mocha",
+    "test:vscode": "node ./dist/test/runTest.js",
+    "compile-tests": "tsc -p tsconfig.test.json",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "ioredis": "^5.4.2",
+    "ssh2": "^1.16.0"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.17.0",
+    "@types/ssh2": "^1.15.1",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.4.1",
+    "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.28.2",
+    "eslint": "^9.17.0",
+    "mocha": "^11.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.67.0"
+  }
+}

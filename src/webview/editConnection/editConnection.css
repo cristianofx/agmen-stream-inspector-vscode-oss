@@ -1,0 +1,219 @@
+/* Edit Connection Dialog Styles */
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+    font-size: var(--vscode-font-size, 13px);
+    color: var(--vscode-foreground);
+    background: var(--vscode-editor-background);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+.dialog-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-width: 520px;
+    margin: 0 auto;
+}
+
+.dialog-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+.dialog-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--vscode-widget-border, #444);
+}
+
+/* Form layout */
+.form-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 12px;
+}
+
+.form-group.flex-1 {
+    flex: 1;
+}
+
+.form-group.flex-shrink {
+    flex: 0 0 auto;
+    width: 130px;
+}
+
+.form-label {
+    font-size: 12px;
+    color: var(--vscode-descriptionForeground, #999);
+    margin-bottom: 4px;
+}
+
+/* Input fields */
+.input-field {
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid var(--vscode-input-border, #3c3c3c);
+    background: var(--vscode-input-background, #1e1e1e);
+    color: var(--vscode-input-foreground, #ccc);
+    border-radius: 2px;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+}
+
+.input-field:focus {
+    border-color: var(--vscode-focusBorder, #007fd4);
+}
+
+.input-field::placeholder {
+    color: var(--vscode-input-placeholderForeground, #666);
+}
+
+.input-field.error {
+    border-color: var(--vscode-inputValidation-errorBorder, #be1100);
+}
+
+select.input-field {
+    cursor: pointer;
+    appearance: auto;
+}
+
+/* Separator */
+.separator {
+    height: 1px;
+    background: var(--vscode-widget-border, #444);
+    margin: 16px 0;
+}
+
+/* Validation error text */
+.validation-error {
+    font-size: 12px;
+    color: var(--vscode-errorForeground, #f48771);
+    margin-top: 4px;
+    min-height: 16px;
+}
+
+/* Collapsible section */
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 12px;
+    color: var(--vscode-descriptionForeground, #999);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.section-header .chevron {
+    font-size: 10px;
+    transition: transform 0.15s ease;
+}
+
+.section-header .chevron.open {
+    transform: rotate(90deg);
+}
+
+.section-content {
+    display: none;
+    padding-left: 4px;
+}
+
+.section-content.open {
+    display: block;
+}
+
+/* Buttons */
+.btn {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 2px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    background: var(--vscode-button-background, #0e639c);
+    color: var(--vscode-button-foreground, #fff);
+}
+
+.btn:hover {
+    background: var(--vscode-button-hoverBackground, #1177bb);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-secondary {
+    background: var(--vscode-button-secondaryBackground, #3a3d41);
+    color: var(--vscode-button-secondaryForeground, #fff);
+}
+
+.btn-secondary:hover {
+    background: var(--vscode-button-secondaryHoverBackground, #45494e);
+}
+
+/* Test connection feedback */
+.test-area {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.test-spinner {
+    display: none;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--vscode-foreground, #ccc);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+.test-spinner.visible {
+    display: inline-block;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.test-result {
+    font-size: 12px;
+    min-height: 18px;
+}
+
+.test-result.success {
+    color: var(--vscode-testing-iconPassed, #73c991);
+}
+
+.test-result.error {
+    color: var(--vscode-errorForeground, #f48771);
+}
+
+/* SSH port field - smaller width */
+.ssh-port-group {
+    width: 90px;
+}
+
+.ssh-port-group .input-field {
+    width: 100%;
+}

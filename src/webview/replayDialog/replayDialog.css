@@ -1,0 +1,114 @@
+/* Replay Dialog Styles */
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+    font-size: var(--vscode-font-size, 13px);
+    color: var(--vscode-foreground);
+    background: var(--vscode-editor-background);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+.dialog-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-width: 450px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.dialog-message {
+    margin-bottom: 12px;
+    line-height: 1.5;
+}
+
+/* Profile selector */
+.input-field {
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid var(--vscode-input-border, #3c3c3c);
+    background: var(--vscode-input-background, #1e1e1e);
+    color: var(--vscode-input-foreground, #ccc);
+    border-radius: 2px;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    appearance: auto;
+    cursor: pointer;
+}
+
+.input-field:focus {
+    border-color: var(--vscode-focusBorder, #007fd4);
+}
+
+select.input-field option.env-test {
+    border-left: 3px solid #0095ff;
+}
+
+select.input-field option.env-prod {
+    border-left: 3px solid #ff2041;
+}
+
+/* Checkbox row */
+.checkbox-row {
+    display: flex;
+    gap: 16px;
+    margin-top: 12px;
+    font-size: 13px;
+}
+
+.checkbox-row label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+}
+
+/* Footer buttons */
+.dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+}
+
+.btn {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 2px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    min-width: 80px;
+    text-align: center;
+    background: var(--vscode-button-background, #0e639c);
+    color: var(--vscode-button-foreground, #fff);
+}
+
+.btn:hover {
+    background: var(--vscode-button-hoverBackground, #1177bb);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-secondary {
+    background: var(--vscode-button-secondaryBackground, #3a3d41);
+    color: var(--vscode-button-secondaryForeground, #fff);
+}
+
+.btn-secondary:hover {
+    background: var(--vscode-button-secondaryHoverBackground, #45494e);
+}
+
+/* Profile option with environment indicator */
+.profile-option-current {
+    font-weight: bold;
+}

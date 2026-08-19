@@ -1,0 +1,136 @@
+/* Manage Profiles Dialog Styles */
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+    font-size: var(--vscode-font-size, 13px);
+    color: var(--vscode-foreground);
+    background: var(--vscode-editor-background);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+.dialog-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.dialog-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+.dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px 16px;
+    border-top: 1px solid var(--vscode-widget-border, #444);
+}
+
+/* Environment group */
+.env-group {
+    margin-bottom: 16px;
+}
+
+.env-group-header {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--vscode-descriptionForeground, #999);
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 2px solid var(--vscode-panel-border, #444);
+}
+
+.env-group-header.env-test {
+    border-bottom-color: #0095ff;
+    color: #0095ff;
+}
+
+.env-group-header.env-prod {
+    border-bottom-color: #ff2041;
+    color: #ff2041;
+}
+
+/* Profile list */
+.profile-list {
+    min-height: 30px;
+    padding: 2px 0;
+}
+
+.profile-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    margin-bottom: 2px;
+    background: var(--vscode-list-inactiveSelectionBackground, rgba(255, 255, 255, 0.04));
+    border-radius: 3px;
+    cursor: grab;
+    user-select: none;
+    font-size: 13px;
+}
+
+.profile-item:hover {
+    background: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.07));
+}
+
+.profile-item.dragging {
+    opacity: 0.4;
+}
+
+.profile-item .drag-handle {
+    color: var(--vscode-descriptionForeground, #666);
+    cursor: grab;
+    font-size: 14px;
+}
+
+.profile-item .profile-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.drop-indicator {
+    height: 2px;
+    background: var(--vscode-focusBorder, #007fd4);
+    margin: 0 4px;
+    display: none;
+}
+
+.drop-indicator.visible {
+    display: block;
+}
+
+/* Empty state */
+.empty-state {
+    color: var(--vscode-descriptionForeground, #666);
+    font-style: italic;
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+/* Button */
+.btn {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 2px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    background: var(--vscode-button-background, #0e639c);
+    color: var(--vscode-button-foreground, #fff);
+}
+
+.btn:hover {
+    background: var(--vscode-button-hoverBackground, #1177bb);
+}
