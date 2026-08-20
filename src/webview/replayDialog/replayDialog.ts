@@ -113,3 +113,5 @@ window.addEventListener('message', (event: MessageEvent) => {
 
 // Signal ready
 vscode.postMessage({ type: 'ready' });
+
+export {};

@@ -9,6 +9,7 @@ export interface SshTunnelOptions {
     sshPassword?: string;
     sshKeyPath?: string;
     sshKeyPassphrase?: string;
+    sshHostKeyFingerprint?: string;
     remoteHost: string;
     remotePort: number;
     localBindHost?: string;
@@ -35,6 +36,9 @@ export class SshTunnel {
         if (!opts.sshPassword && !opts.sshKeyPath) {
             throw new Error('Provide SSH password or key for authentication.');
         }
+        if (!opts.sshHostKeyFingerprint) {
+            throw new Error('SSH host fingerprint is required for secure tunneling.');
+        }
 
         const localHost = opts.localBindHost || '127.0.0.1';
         const localPort = opts.localBindPort && opts.localBindPort > 0
@@ -46,6 +50,8 @@ export class SshTunnel {
             port: opts.sshPort,
             username: opts.sshUser,
             readyTimeout: 10000,
+            hostHash: 'sha256',
+            hostVerifier: (fingerprint: string) => fingerprint === stripFingerprintPrefix(opts.sshHostKeyFingerprint!),
         };
 
         if (opts.sshPassword) {
@@ -111,4 +117,8 @@ function getFreeTcpPort(host: string): Promise<number> {
             server.close(() => resolve(port));
         });
     });
+}
+
+function stripFingerprintPrefix(fingerprint: string): string {
+    return fingerprint.replace(/^SHA256:/i, '');
 }

@@ -10,6 +10,9 @@ import { StreamWatcher } from '../core/services/streamWatcher';
 import { discoverStreamsAsync } from '../core/services/streamDiscoveryService';
 import { buildRedisOptions } from '../core/services/redisConnectionBuilder';
 import { SshTunnel } from '../core/services/sshTunnel';
+import { parseRedisEndpoint } from '../core/services/redisEndpoint';
+import { validateMainPanelMessage } from '../core/security/webviewMessageValidator';
+import { WatchResultBuffer } from '../core/services/watchResultBuffer';
 import { WebviewToExtension, ExtensionToWebview, SearchOptionsDto } from '../webview/shared/messageProtocol';
 import { EditConnectionProvider } from './editConnectionProvider';
 import { ReplayDialogProvider } from './replayDialogProvider';
@@ -24,6 +27,7 @@ export class MainPanelProvider implements vscode.Disposable {
     private _selectedProfileId: string | undefined;
     private _redis: Redis | undefined;
     private _sshTunnel: SshTunnel | undefined;
+    private readonly _outputChannel = vscode.window.createOutputChannel('Agmen Stream Inspector');
     private _editConnectionProvider: EditConnectionProvider;
     private _replayDialogProvider: ReplayDialogProvider;
     private _manageProfilesProvider: ManageProfilesProvider;
@@ -134,6 +138,7 @@ export class MainPanelProvider implements vscode.Disposable {
         this._cancel();
         this._cleanupConnection();
         this._panel?.dispose();
+        this._outputChannel.dispose();
         for (const d of this._disposables) {
             d.dispose();
         }
@@ -143,6 +148,13 @@ export class MainPanelProvider implements vscode.Disposable {
     // --- Message Handler ---
 
     private async _handleMessage(msg: WebviewToExtension): Promise<void> {
+        const validated = validateMainPanelMessage(msg);
+        if (!validated.ok) {
+            this._outputChannel.appendLine(`Rejected malformed message: ${validated.error}`);
+            this._sendToWebview({ type: 'error', payload: { message: 'Invalid request from webview.' } });
+            return;
+        }
+
         switch (msg.type) {
             case 'ready':
                 await this._onWebviewReady();
@@ -198,6 +210,8 @@ export class MainPanelProvider implements vscode.Disposable {
     // --- Core Operations ---
 
     private async _fetchStreams(profileId: string): Promise<void> {
+        this._cancel();
+        this._cleanupConnection();
         this._selectedProfileId = profileId;
         const profile = this._profiles.find(p => p.id === profileId);
         if (!profile || !profile.redisUrl) {
@@ -206,24 +220,26 @@ export class MainPanelProvider implements vscode.Disposable {
         }
 
         this._sendToWebview({ type: 'statusUpdate', payload: { status: 'Fetching streams...', statusType: 'connecting' } });
-
-        let redis: Redis | undefined;
-        let tunnel: SshTunnel | undefined;
+        this._abortController = new AbortController();
+        const signal = this._abortController.signal;
 
         try {
             const connResult = await this._connectToRedis(profile);
-            redis = connResult.redis;
-            tunnel = connResult.tunnel;
+            this._redis = connResult.redis;
+            this._sshTunnel = connResult.tunnel;
 
-            const streams = await discoverStreamsAsync(redis);
+            const streams = await discoverStreamsAsync(this._redis, undefined, signal);
             this._sendToWebview({ type: 'streamsDiscovered', payload: streams });
             this._sendToWebview({ type: 'statusUpdate', payload: { status: `Found ${streams.length} streams`, statusType: 'done' } });
         } catch (ex: unknown) {
-            const msg = ex instanceof Error ? ex.message : String(ex);
-            this._sendToWebview({ type: 'error', payload: { message: `Error fetching streams: ${msg}` } });
+            if (!signal.aborted) {
+                const msg = ex instanceof Error ? ex.message : String(ex);
+                this._outputChannel.appendLine(`Fetch streams failed: ${msg}`);
+                this._sendToWebview({ type: 'error', payload: { message: `Error fetching streams: ${msg}` } });
+            }
         } finally {
-            try { redis?.disconnect(); } catch { /* ignore */ }
-            try { tunnel?.dispose(); } catch { /* ignore */ }
+            this._cleanupConnection();
+            this._abortController = undefined;
         }
     }
 
@@ -255,8 +271,8 @@ export class MainPanelProvider implements vscode.Disposable {
 
             const opts = createSearchOptions({
                 streams: dto.streams,
-                findField: dto.useAdvancedFilters ? undefined : (dto.findField || undefined),
-                findEq: dto.useAdvancedFilters ? undefined : (dto.findEq || undefined),
+                findField: dto.findField || undefined,
+                findEq: dto.findEq || undefined,
                 jsonField: dto.jsonField || 'message',
                 findLast: dto.findLast ?? 0,
                 findMax: dto.findMax ?? Number.MAX_SAFE_INTEGER,
@@ -331,11 +347,12 @@ export class MainPanelProvider implements vscode.Disposable {
             this._sshTunnel = connResult.tunnel;
 
             const pollInterval = vscode.workspace.getConfiguration('redisInspector').get<number>('pollIntervalMs', 100);
+            const retentionMax = vscode.workspace.getConfiguration('redisInspector').get<number>('watchRetentionMaxResults', 1000);
 
             const opts = createSearchOptions({
                 streams: dto.streams,
-                findField: dto.useAdvancedFilters ? undefined : (dto.findField || undefined),
-                findEq: dto.useAdvancedFilters ? undefined : (dto.findEq || undefined),
+                findField: dto.findField || undefined,
+                findEq: dto.findEq || undefined,
                 jsonField: dto.jsonField || 'message',
                 findLast: dto.findLast ?? 0,
                 findMax: dto.findMax ?? Number.MAX_SAFE_INTEGER,
@@ -346,17 +363,39 @@ export class MainPanelProvider implements vscode.Disposable {
             });
 
             const watcher = new StreamWatcher(this._redis, opts, pollInterval);
+            const buffer = new WatchResultBuffer(retentionMax);
+            let emitted = 0;
 
             this._sendToWebview({ type: 'statusUpdate', payload: { status: 'Watching...', statusType: 'watching' } });
 
             for await (const hit of watcher.watchAsync(signal)) {
                 if (signal.aborted) { break; }
-                this._results.push(hit);
+                emitted += 1;
+                buffer.push(hit);
+                this._results = [...buffer.items];
                 this._sendToWebview({ type: 'searchResult', payload: hit });
+                if (buffer.droppedCount > 0) {
+                    this._sendToWebview({
+                        type: 'statusUpdate',
+                        payload: {
+                            status: `Watching... retained ${this._results.length} results, dropped ${buffer.droppedCount}`,
+                            statusType: 'watching',
+                        },
+                    });
+                }
+                if (emitted >= opts.findMax) {
+                    this._sendToWebview({
+                        type: 'statusUpdate',
+                        payload: { status: `Watch reached limit of ${opts.findMax} result(s)`, statusType: 'done' },
+                    });
+                    this._cancel();
+                    break;
+                }
             }
         } catch (ex: unknown) {
             if (!signal.aborted) {
                 const msg = ex instanceof Error ? ex.message : String(ex);
+                this._outputChannel.appendLine(`Watch failed: ${msg}`);
                 this._sendToWebview({ type: 'error', payload: { message: msg } });
                 this._sendToWebview({ type: 'statusUpdate', payload: { status: `Error: ${msg}`, statusType: 'error' } });
             }
@@ -396,6 +435,12 @@ export class MainPanelProvider implements vscode.Disposable {
         let redis: Redis | undefined;
         let tunnel: SshTunnel | undefined;
         let sent = 0;
+        let failed = 0;
+
+        this._cancel();
+        this._cleanupConnection();
+        this._abortController = new AbortController();
+        const signal = this._abortController.signal;
 
         try {
             this._sendToWebview({ type: 'statusUpdate', payload: { status: 'Connecting to target...', statusType: 'connecting' } });
@@ -403,28 +448,55 @@ export class MainPanelProvider implements vscode.Disposable {
             const connResult = await this._connectToRedis(targetProfile);
             redis = connResult.redis;
             tunnel = connResult.tunnel;
+            this._redis = redis;
+            this._sshTunnel = tunnel;
 
             this._sendToWebview({ type: 'statusUpdate', payload: { status: `Replaying ${hits.length} message(s)...`, statusType: 'connecting' } });
 
-            for (const hit of hits) {
-                // Convert fields to flat key-value array for XADD
-                const args: string[] = [];
-                if (hit.fields) {
-                    for (const [key, value] of Object.entries(hit.fields)) {
-                        args.push(key, value);
+            const batchSize = 50;
+            for (let index = 0; index < hits.length && !signal.aborted; index += batchSize) {
+                const batch = hits.slice(index, index + batchSize);
+                const pipeline = redis.pipeline();
+                for (const hit of batch) {
+                    const args: string[] = [];
+                    if (hit.fields) {
+                        for (const [key, value] of Object.entries(hit.fields)) {
+                            args.push(key, value);
+                        }
+                    }
+                    pipeline.xadd(hit.stream, '*', ...args);
+                }
+
+                const results = await pipeline.exec();
+                for (const result of results ?? []) {
+                    if (result[0]) {
+                        failed += 1;
+                    } else {
+                        sent += 1;
                     }
                 }
-                await redis.xadd(hit.stream, '*', ...args);
-                sent++;
             }
 
-            this._sendToWebview({ type: 'statusUpdate', payload: { status: `Replayed ${sent} message(s) to ${targetProfile.name}`, statusType: 'done' } });
+            if (signal.aborted) {
+                this._sendToWebview({
+                    type: 'statusUpdate',
+                    payload: { status: `Replay canceled after ${sent} success(es) and ${failed} failure(s)`, statusType: 'canceled' },
+                });
+            } else if (failed > 0) {
+                this._sendToWebview({
+                    type: 'statusUpdate',
+                    payload: { status: `Replay finished with ${sent} success(es) and ${failed} failure(s)`, statusType: 'error' },
+                });
+            } else {
+                this._sendToWebview({ type: 'statusUpdate', payload: { status: `Replayed ${sent} message(s) to ${targetProfile.name}`, statusType: 'done' } });
+            }
         } catch (ex: unknown) {
             const msg = ex instanceof Error ? ex.message : String(ex);
+            this._outputChannel.appendLine(`Replay failed after ${sent} success(es): ${msg}`);
             this._sendToWebview({ type: 'statusUpdate', payload: { status: `Replay failed: ${msg}`, statusType: 'error' } });
         } finally {
-            try { redis?.disconnect(); } catch { /* ignore */ }
-            try { tunnel?.dispose(); } catch { /* ignore */ }
+            this._cleanupConnection();
+            this._abortController = undefined;
         }
     }
 
@@ -447,16 +519,20 @@ export class MainPanelProvider implements vscode.Disposable {
         let tunnel: SshTunnel | undefined;
 
         if (profile.sshHost) {
-            const { host: remoteHost, port: remotePort } = parseRedisHostPort(profile.redisUrl);
+            const endpoint = parseRedisEndpoint(profile.redisUrl);
             const sshPassword = await this._connectionService.getDecryptedSshPassword(profile.id);
+            const sshKeyPassphrase = await this._connectionService.getDecryptedSshKeyPassphrase(profile.id);
 
             tunnel = await SshTunnel.open({
                 sshHost: profile.sshHost,
                 sshPort: profile.sshPort || 22,
                 sshUser: profile.sshUser || '',
                 sshPassword: sshPassword,
-                remoteHost,
-                remotePort,
+                sshKeyPath: profile.sshKeyPath || undefined,
+                sshKeyPassphrase: sshKeyPassphrase || undefined,
+                sshHostKeyFingerprint: profile.sshHostKeyFingerprint || undefined,
+                remoteHost: endpoint.host,
+                remotePort: endpoint.port,
             });
         }
 
@@ -485,6 +561,7 @@ export class MainPanelProvider implements vscode.Disposable {
 
     private _cancel(): void {
         this._abortController?.abort();
+        this._cleanupConnection();
         this._abortController = undefined;
     }
 
@@ -574,7 +651,7 @@ export class MainPanelProvider implements vscode.Disposable {
                     </div>
                     <input type="text" id="streamFilter" class="input-field" placeholder="Filter streams..." />
                     <div id="streamList" class="stream-list"></div>
-                    <div id="streamSelectorStatus" class="status-text-small"></div>
+                    <div id="streamSelectorStatus" class="status-text-small" aria-live="polite"></div>
                 </section>
 
                 <section class="section search-section">
@@ -650,7 +727,7 @@ export class MainPanelProvider implements vscode.Disposable {
                     </div>
                 </section>
 
-                <div id="statusText" class="status-text"></div>
+                <div id="statusText" class="status-text" aria-live="polite"></div>
             </aside>
 
             <!-- Right Content -->
@@ -664,9 +741,9 @@ export class MainPanelProvider implements vscode.Disposable {
                 </div>
                 <div class="split-container" id="splitContainer">
                     <div class="results-panel" id="resultsPanel">
-                        <div class="results-list" id="resultsList"></div>
+                        <div class="results-list" id="resultsList" role="listbox" aria-label="Search results"></div>
                     </div>
-                    <div class="splitter" id="splitter"></div>
+                    <div class="splitter" id="splitter" role="separator" aria-orientation="horizontal" tabindex="0" aria-label="Resize results and message panels"></div>
                     <div class="viewer-panel" id="viewerPanel">
                         <div class="find-bar" id="findBar" style="display:none;">
                             <input type="text" id="findInput" class="input-field find-input" placeholder="Find in message..." />
@@ -684,9 +761,9 @@ export class MainPanelProvider implements vscode.Disposable {
         </div>
     </div>
     <!-- Filter Help Modal -->
-    <div id="filterHelpModal" class="modal-overlay" style="display:none;">
+    <div id="filterHelpModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="filterHelpTitle" style="display:none;">
         <div class="modal-content">
-            <h3 style="margin-bottom: 12px;">Advanced Filters - Help</h3>
+            <h3 id="filterHelpTitle" style="margin-bottom: 12px;">Advanced Filters - Help</h3>
 
             <h4>How it works</h4>
             <p>Each condition checks a JSON field in the message against a value. Conditions at the root level are combined using the top-level operator (AND or OR). Groups let you nest conditions with a different operator, so you can build expressions like "A AND (B OR C)".</p>
@@ -766,21 +843,4 @@ function timestamp(): string {
     const d = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-}
-
-function parseRedisHostPort(redisUrl: string): { host: string; port: number } {
-    const lower = redisUrl.toLowerCase();
-    if (lower.startsWith('redis://') || lower.startsWith('rediss://')) {
-        try {
-            const u = new URL(redisUrl);
-            return { host: u.hostname || 'localhost', port: u.port ? parseInt(u.port, 10) : 6379 };
-        } catch {
-            return { host: 'localhost', port: 6379 };
-        }
-    }
-    const parts = redisUrl.split(':');
-    return {
-        host: parts[0] || 'localhost',
-        port: parts.length > 1 ? parseInt(parts[1], 10) || 6379 : 6379,
-    };
 }

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ConnectionProfile } from '../core/models/connectionProfile';
+import { validateReplayDialogMessage } from '../core/security/webviewMessageValidator';
 
 /**
  * Manages the Replay Dialog webview panel.
@@ -56,6 +57,10 @@ export class ReplayDialogProvider {
                 : `Select the target server to replay ${messageCount} messages:`;
 
             this._panel.webview.onDidReceiveMessage(async (msg) => {
+                const validated = validateReplayDialogMessage(msg);
+                if (!validated.ok) {
+                    return;
+                }
                 switch (msg.type) {
                     case 'ready':
                         this._panel?.webview.postMessage({
@@ -118,7 +123,8 @@ export class ReplayDialogProvider {
 <body>
     <div class="dialog-container">
         <p class="dialog-message" id="dialogMessage">Select the target server:</p>
-        <select id="profileSelect" class="input-field">
+        <p id="replayWarning">Replay writes immediately to the selected Redis server.</p>
+        <select id="profileSelect" class="input-field" aria-describedby="replayWarning">
             <option value="">Choose a server...</option>
         </select>
         <div class="checkbox-row">

@@ -4,6 +4,8 @@ const vscode = acquireVsCodeApi();
 // --- State ---
 let selectedResultIndex = -1;
 let resultCount = 0;
+const MAX_RENDERED_RESULTS = 1000;
+let lastFocusedElement: HTMLElement | null = null;
 
 // --- DOM References ---
 const connectionSelect = document.getElementById('connectionSelect') as HTMLSelectElement;
@@ -85,6 +87,9 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && findBar.style.display !== 'none') {
         findBar.style.display = 'none';
     }
+    if (e.key === 'Escape' && filterHelpModal.style.display !== 'none') {
+        closeHelpModal();
+    }
 });
 
 findInput.addEventListener('keydown', (e) => {
@@ -126,6 +131,13 @@ findInput.addEventListener('keydown', (e) => {
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
         }
+    });
+
+    splitter.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') { return; }
+        const delta = e.key === 'ArrowUp' ? -24 : 24;
+        setResultsPanelHeight(resultsPanel.getBoundingClientRect().height + delta);
+        e.preventDefault();
     });
 })();
 
@@ -180,18 +192,20 @@ const filterHelpCloseBtn = document.getElementById('filterHelpCloseBtn') as HTML
 
 if (filterHelpBtn && filterHelpModal) {
     filterHelpBtn.addEventListener('click', () => {
+        lastFocusedElement = document.activeElement as HTMLElement | null;
         filterHelpModal.style.display = 'flex';
+        filterHelpCloseBtn.focus();
     });
 }
 if (filterHelpCloseBtn && filterHelpModal) {
     filterHelpCloseBtn.addEventListener('click', () => {
-        filterHelpModal.style.display = 'none';
+        closeHelpModal();
     });
 }
 if (filterHelpModal) {
     filterHelpModal.addEventListener('click', (e) => {
         if (e.target === filterHelpModal) {
-            filterHelpModal.style.display = 'none';
+            closeHelpModal();
         }
     });
 }
@@ -423,36 +437,50 @@ function renderProfiles(profiles: Array<{ id: string; name: string; environment:
 
 function renderStreams(streams: string[]) {
     streamList.innerHTML = '';
-    for (const name of streams) {
+    streams.forEach((name, index) => {
         const div = document.createElement('div');
         div.className = 'stream-item';
         div.setAttribute('data-name', name);
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
+        checkbox.id = `stream-${index}`;
         checkbox.setAttribute('data-stream', name);
         checkbox.checked = false;
-        const label = document.createElement('span');
+        const label = document.createElement('label');
+        label.htmlFor = checkbox.id;
         label.textContent = name;
         div.appendChild(checkbox);
         div.appendChild(label);
         streamList.appendChild(div);
-    }
+    });
 }
 
 function addResult(hit: { stream: string; id: string; idDateTimeFormatted?: string; rawMessage?: string }) {
-    const div = document.createElement('div');
+    const div = document.createElement('button');
+    div.type = 'button';
     div.className = 'result-item';
-    const idx = resultCount++;
-    div.setAttribute('data-index', String(idx));
+    resultCount++;
+    div.setAttribute('role', 'option');
     div.innerHTML = `<span class="result-stream">${escapeHtml(hit.stream)}</span>
         <span class="result-id">${escapeHtml(hit.idDateTimeFormatted ?? hit.id)}</span>`;
-    div.addEventListener('click', () => {
-        resultsList.querySelector('.result-item.selected')?.classList.remove('selected');
-        div.classList.add('selected');
-        selectedResultIndex = idx;
-        vscode.postMessage({ type: 'selectResult', payload: { index: idx } });
+    div.addEventListener('click', () => selectRenderedResult(div));
+    div.addEventListener('keydown', (event: KeyboardEvent) => {
+        if (event.key === 'ArrowDown') {
+            (div.nextElementSibling as HTMLElement | null)?.focus();
+            event.preventDefault();
+        } else if (event.key === 'ArrowUp') {
+            (div.previousElementSibling as HTMLElement | null)?.focus();
+            event.preventDefault();
+        } else if (event.key === 'Enter' || event.key === ' ') {
+            selectRenderedResult(div);
+            event.preventDefault();
+        }
     });
     resultsList.appendChild(div);
+    while (resultsList.children.length > MAX_RENDERED_RESULTS) {
+        resultsList.firstElementChild?.remove();
+    }
+    syncRenderedResultIndices();
     summaryText.textContent = `${resultCount} results`;
 }
 
@@ -476,6 +504,25 @@ function escapeHtml(str: string): string {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+}
+
+function selectRenderedResult(element: HTMLElement) {
+    const index = parseInt(element.getAttribute('data-index') || '-1', 10);
+    if (index < 0) { return; }
+    resultsList.querySelector('.result-item.selected')?.classList.remove('selected');
+    element.classList.add('selected');
+    selectedResultIndex = index;
+    vscode.postMessage({ type: 'selectResult', payload: { index } });
+}
+
+function syncRenderedResultIndices() {
+    const items = Array.from(resultsList.querySelectorAll<HTMLElement>('.result-item'));
+    items.forEach((item, index) => {
+        item.setAttribute('data-index', String(index));
+    });
+    if (selectedResultIndex >= items.length) {
+        selectedResultIndex = -1;
+    }
 }
 
 // --- Message handler from extension host ---
@@ -559,3 +606,18 @@ interface WindowWithFind extends Window {
         showDialog?: boolean
     ): boolean;
 }
+
+function closeHelpModal() {
+    filterHelpModal.style.display = 'none';
+    lastFocusedElement?.focus();
+}
+
+function setResultsPanelHeight(newHeight: number) {
+    const containerHeight = resultsPanel.parentElement!.getBoundingClientRect().height - splitter.offsetHeight;
+    const clampedHeight = Math.min(Math.max(60, newHeight), containerHeight - 60);
+    resultsPanel.style.flex = 'none';
+    resultsPanel.style.height = `${clampedHeight}px`;
+    viewerPanel.style.flex = '1';
+}
+
+export {};

@@ -4,6 +4,8 @@ import { ConnectionProfile, createDefaultProfile } from '../core/models/connecti
 import { ConnectionService } from '../services/connectionService';
 import { buildRedisOptions } from '../core/services/redisConnectionBuilder';
 import { SshTunnel } from '../core/services/sshTunnel';
+import { parseRedisEndpoint } from '../core/services/redisEndpoint';
+import { validateEditConnectionMessage } from '../core/security/webviewMessageValidator';
 
 /**
  * Manages the Edit Connection webview panel.
@@ -54,6 +56,18 @@ export class EditConnectionProvider {
             this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
 
             this._panel.webview.onDidReceiveMessage(async (msg) => {
+                const validated = validateEditConnectionMessage(msg);
+                if (!validated.ok) {
+                    this._panel?.webview.postMessage({
+                        type: 'testResult',
+                        payload: {
+                            success: false,
+                            message: validated.error,
+                        },
+                    });
+                    return;
+                }
+
                 switch (msg.type) {
                     case 'ready':
                         await this._sendProfile(profile, isEdit);
@@ -66,6 +80,9 @@ export class EditConnectionProvider {
                         break;
                     case 'testConnection':
                         await this._testConnection(msg.payload);
+                        break;
+                    case 'browseSshKey':
+                        await this._browseSshKey();
                         break;
                 }
             });
@@ -84,9 +101,11 @@ export class EditConnectionProvider {
         // For edit mode, load passwords from secret storage
         let redisPass = '';
         let sshPass = '';
+        let sshKeyPassphrase = '';
         if (isEdit) {
             redisPass = await this._connectionService.getDecryptedRedisPassword(profile.id) || '';
             sshPass = await this._connectionService.getDecryptedSshPassword(profile.id) || '';
+            sshKeyPassphrase = await this._connectionService.getDecryptedSshKeyPassphrase(profile.id) || '';
         }
 
         this._panel?.webview.postMessage({
@@ -95,6 +114,7 @@ export class EditConnectionProvider {
                 ...profile,
                 redisPass,
                 sshPass,
+                sshKeyPassphrase,
             },
         });
     }
@@ -112,6 +132,9 @@ export class EditConnectionProvider {
         sshPort: number;
         sshUser: string;
         sshPass: string;
+        sshKeyPath: string;
+        sshKeyPassphrase: string;
+        sshHostKeyFingerprint: string;
     }): Promise<void> {
         this._panel?.webview.postMessage({ type: 'testStarted' });
 
@@ -121,14 +144,17 @@ export class EditConnectionProvider {
         try {
             // Set up SSH tunnel if configured
             if (payload.sshHost) {
-                const { host: remoteHost, port: remotePort } = parseRedisHostPort(payload.redisUrl);
+                const endpoint = parseRedisEndpoint(payload.redisUrl);
                 tunnel = await SshTunnel.open({
                     sshHost: payload.sshHost,
                     sshPort: payload.sshPort || 22,
                     sshUser: payload.sshUser || '',
-                    sshPassword: payload.sshPass,
-                    remoteHost,
-                    remotePort,
+                    sshPassword: payload.sshPass || undefined,
+                    sshKeyPath: payload.sshKeyPath || undefined,
+                    sshKeyPassphrase: payload.sshKeyPassphrase || undefined,
+                    sshHostKeyFingerprint: payload.sshHostKeyFingerprint || undefined,
+                    remoteHost: endpoint.host,
+                    remotePort: endpoint.port,
                 });
             }
 
@@ -175,6 +201,22 @@ export class EditConnectionProvider {
         }
         this._panel?.dispose();
         this._panel = undefined;
+    }
+
+    private async _browseSshKey(): Promise<void> {
+        const result = await vscode.window.showOpenDialog({
+            canSelectFiles: true,
+            canSelectFolders: false,
+            canSelectMany: false,
+            openLabel: 'Select SSH Private Key',
+        });
+        const selectedPath = result?.[0]?.fsPath;
+        if (selectedPath) {
+            this._panel?.webview.postMessage({
+                type: 'sshKeySelected',
+                payload: { path: selectedPath },
+            });
+        }
     }
 
     private _getHtmlForWebview(webview: vscode.Webview): string {
@@ -269,6 +311,21 @@ export class EditConnectionProvider {
                     <label class="form-label" for="sshPass">SSH Password</label>
                     <input type="password" id="sshPass" class="input-field" placeholder="password" autocomplete="off" />
                 </div>
+                <div class="form-group">
+                    <label class="form-label" for="sshKeyPath">SSH Private Key</label>
+                    <div class="form-row">
+                        <input type="text" id="sshKeyPath" class="input-field flex-1" placeholder="/path/to/id_ed25519" autocomplete="off" />
+                        <button id="btnBrowseSshKey" class="btn btn-secondary" type="button">Browse</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="sshKeyPassphrase">Key Passphrase</label>
+                    <input type="password" id="sshKeyPassphrase" class="input-field" placeholder="leave empty if not required" autocomplete="off" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="sshHostKeyFingerprint">SSH Host Fingerprint</label>
+                    <input type="text" id="sshHostKeyFingerprint" class="input-field" placeholder="SHA256:..." autocomplete="off" />
+                </div>
             </div>
         </div>
 
@@ -297,21 +354,4 @@ function getNonce(): string {
         text += possible.charAt(Math.floor(Math.random() * possible.length));
     }
     return text;
-}
-
-function parseRedisHostPort(redisUrl: string): { host: string; port: number } {
-    const lower = redisUrl.toLowerCase();
-    if (lower.startsWith('redis://') || lower.startsWith('rediss://')) {
-        try {
-            const u = new URL(redisUrl);
-            return { host: u.hostname || 'localhost', port: u.port ? parseInt(u.port, 10) : 6379 };
-        } catch {
-            return { host: 'localhost', port: 6379 };
-        }
-    }
-    const parts = redisUrl.split(':');
-    return {
-        host: parts[0] || 'localhost',
-        port: parts.length > 1 ? parseInt(parts[1], 10) || 6379 : 6379,
-    };
 }

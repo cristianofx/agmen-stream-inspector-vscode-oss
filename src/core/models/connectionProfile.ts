@@ -10,6 +10,9 @@ export interface ConnectionProfile {
     sshPort: number;
     sshUser: string;
     sshPass: string;
+    sshKeyPath?: string;
+    sshKeyPassphrase?: string;
+    sshHostKeyFingerprint?: string;
     environment: ProfileEnvironment;
     sortOrder: number;
 }
@@ -25,6 +28,9 @@ export function createDefaultProfile(): ConnectionProfile {
         sshPort: 22,
         sshUser: '',
         sshPass: '',
+        sshKeyPath: '',
+        sshKeyPassphrase: '',
+        sshHostKeyFingerprint: '',
         environment: ProfileEnvironment.Dev,
         sortOrder: 0,
     };

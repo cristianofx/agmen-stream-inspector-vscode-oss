@@ -14,14 +14,31 @@ export function matches(
     entryFields: Record<string, string>,
     opts: SearchOptions,
 ): { matched: boolean; rawMessage?: string | undefined } {
-    // Advanced conditional filters take precedence over the basic field matcher.
+    const basicMatch = matchBasicFields(entryFields, opts);
+    if (!basicMatch.matched) {
+        return basicMatch;
+    }
+
     if (opts.conditionalFilter &&
         (opts.conditionalFilter.conditions.length > 0 ||
             opts.conditionalFilter.nestedGroups?.length)) {
-        return conditionalMatcher.matches(entryFields, opts.conditionalFilter, opts);
+        const advancedMatch = conditionalMatcher.matches(entryFields, opts.conditionalFilter, opts);
+        if (!advancedMatch.matched) {
+            return advancedMatch;
+        }
+        return {
+            matched: true,
+            rawMessage: advancedMatch.rawMessage ?? basicMatch.rawMessage,
+        };
     }
 
-    // EXISTING: Legacy single-field filter logic
+    return basicMatch;
+}
+
+function matchBasicFields(
+    entryFields: Record<string, string>,
+    opts: SearchOptions,
+): { matched: boolean; rawMessage?: string | undefined } {
     const caseInsensitive = opts.findCaseInsensitive;
     const jsonFieldName = opts.jsonField || 'message';
 

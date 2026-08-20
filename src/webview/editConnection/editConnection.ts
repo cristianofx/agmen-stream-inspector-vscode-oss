@@ -2,6 +2,7 @@
  * Edit Connection webview script.
  * Runs in the browser context inside the webview panel.
  */
+import { validateRedisUrl as validateRedisEndpoint } from '../../core/services/redisUrlValidator';
 
 interface VsCodeApi {
     postMessage(msg: unknown): void;
@@ -24,10 +25,14 @@ const sshHostInput = document.getElementById('sshHost') as HTMLInputElement;
 const sshPortInput = document.getElementById('sshPort') as HTMLInputElement;
 const sshUserInput = document.getElementById('sshUser') as HTMLInputElement;
 const sshPassInput = document.getElementById('sshPass') as HTMLInputElement;
+const sshKeyPathInput = document.getElementById('sshKeyPath') as HTMLInputElement;
+const sshKeyPassphraseInput = document.getElementById('sshKeyPassphrase') as HTMLInputElement;
+const sshHostKeyFingerprintInput = document.getElementById('sshHostKeyFingerprint') as HTMLInputElement;
 
 const btnTestConnection = document.getElementById('btnTestConnection') as HTMLButtonElement;
 const btnOk = document.getElementById('btnOk') as HTMLButtonElement;
 const btnCancel = document.getElementById('btnCancel') as HTMLButtonElement;
+const btnBrowseSshKey = document.getElementById('btnBrowseSshKey') as HTMLButtonElement;
 
 const testSpinner = document.getElementById('testSpinner') as HTMLElement;
 const testResult = document.getElementById('testResult') as HTMLElement;
@@ -58,57 +63,17 @@ function toggleSection(content: HTMLElement, chevron: HTMLElement): void {
 redisAuthHeader.addEventListener('click', () => toggleSection(redisAuthContent, redisAuthChevron));
 sshHeader.addEventListener('click', () => toggleSection(sshContent, sshChevron));
 
-// --- Validation ---
-function validateRedisUrl(url: string): { valid: boolean; error: string } {
-    const s = url?.trim();
-    if (!s) {
-        return { valid: false, error: 'Redis URL is required.' };
-    }
-
-    if (s.toLowerCase().startsWith('redis://') || s.toLowerCase().startsWith('rediss://')) {
-        try {
-            const u = new URL(s);
-            if (!u.hostname) {
-                return { valid: false, error: 'URI must include host (e.g., redis://localhost:6379).' };
-            }
-            const port = u.port ? parseInt(u.port, 10) : -1;
-            if (port > 65535) {
-                return { valid: false, error: 'Port out of range.' };
-            }
-            return { valid: true, error: '' };
-        } catch (ex: unknown) {
-            const msg = ex instanceof Error ? ex.message : String(ex);
-            return { valid: false, error: `Invalid Redis URI. ${msg}` };
-        }
-    }
-
-    const parts = s.split(':').map(p => p.trim()).filter(p => p.length > 0);
-    if (!parts[0]) {
-        return { valid: false, error: 'Host is required (e.g., localhost or localhost:6379).' };
-    }
-    if (parts.length > 1) {
-        const portVal = parseInt(parts[1], 10);
-        if (isNaN(portVal)) {
-            return { valid: false, error: 'Port must be a number.' };
-        }
-        if (portVal < 0 || portVal > 65535) {
-            return { valid: false, error: 'Port out of range.' };
-        }
-    }
-    return { valid: true, error: '' };
-}
-
 let isRedisUrlValid = false;
 
 function updateValidation(): void {
-    const result = validateRedisUrl(redisUrlInput.value);
+    const result = validateRedisEndpoint(redisUrlInput.value);
     isRedisUrlValid = result.valid;
 
     if (result.valid) {
         redisUrlError.textContent = '';
         redisUrlInput.classList.remove('error');
     } else {
-        redisUrlError.textContent = result.error;
+        redisUrlError.textContent = result.errorMessage || 'Invalid Redis URL.';
         redisUrlInput.classList.add('error');
     }
 
@@ -129,6 +94,10 @@ btnCancel.addEventListener('click', () => {
     vscode.postMessage({ type: 'cancel' });
 });
 
+btnBrowseSshKey.addEventListener('click', () => {
+    vscode.postMessage({ type: 'browseSshKey' });
+});
+
 btnOk.addEventListener('click', () => {
     const profile = {
         id: profileId,
@@ -140,6 +109,9 @@ btnOk.addEventListener('click', () => {
         sshPort: parseInt(sshPortInput.value, 10) || 22,
         sshUser: sshUserInput.value.trim(),
         sshPass: sshPassInput.value,
+        sshKeyPath: sshKeyPathInput.value.trim(),
+        sshKeyPassphrase: sshKeyPassphraseInput.value,
+        sshHostKeyFingerprint: sshHostKeyFingerprintInput.value.trim(),
         environment: parseInt(envSelect.value, 10),
         sortOrder: 0,
     };
@@ -158,6 +130,9 @@ btnTestConnection.addEventListener('click', () => {
             sshPort: parseInt(sshPortInput.value, 10) || 22,
             sshUser: sshUserInput.value.trim(),
             sshPass: sshPassInput.value,
+            sshKeyPath: sshKeyPathInput.value.trim(),
+            sshKeyPassphrase: sshKeyPassphraseInput.value,
+            sshHostKeyFingerprint: sshHostKeyFingerprintInput.value.trim(),
         },
     });
 });
@@ -178,13 +153,16 @@ window.addEventListener('message', (event: MessageEvent) => {
             sshPortInput.value = String(p.sshPort || 22);
             sshUserInput.value = p.sshUser || '';
             sshPassInput.value = p.sshPass || '';
+            sshKeyPathInput.value = p.sshKeyPath || '';
+            sshKeyPassphraseInput.value = p.sshKeyPassphrase || '';
+            sshHostKeyFingerprintInput.value = p.sshHostKeyFingerprint || '';
 
             // Auto-expand sections if they have data
             if (p.redisUser || p.redisPass) {
                 redisAuthContent.classList.add('open');
                 redisAuthChevron.classList.add('open');
             }
-            if (p.sshHost) {
+            if (p.sshHost || p.sshKeyPath || p.sshHostKeyFingerprint) {
                 sshContent.classList.add('open');
                 sshChevron.classList.add('open');
             }
@@ -209,8 +187,13 @@ window.addEventListener('message', (event: MessageEvent) => {
             updateCanAccept();
             break;
         }
+        case 'sshKeySelected':
+            sshKeyPathInput.value = msg.payload.path || '';
+            break;
     }
 });
 
 // Signal ready
 vscode.postMessage({ type: 'ready' });
+
+export {};

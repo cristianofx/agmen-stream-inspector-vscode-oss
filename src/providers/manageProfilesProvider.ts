@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ConnectionProfile } from '../core/models/connectionProfile';
 import { ConnectionService } from '../services/connectionService';
+import { validateManageProfilesMessage } from '../core/security/webviewMessageValidator';
 
 /**
  * Manages the Manage Profiles webview panel.
@@ -44,6 +45,10 @@ export class ManageProfilesProvider {
             this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
 
             this._panel.webview.onDidReceiveMessage(async (msg) => {
+                const validated = validateManageProfilesMessage(msg);
+                if (!validated.ok) {
+                    return;
+                }
                 switch (msg.type) {
                     case 'ready':
                         this._panel?.webview.postMessage({
@@ -135,6 +140,7 @@ export class ManageProfilesProvider {
                 <div class="profile-list" id="prodList"></div>
             </div>
         </div>
+        <p class="sr-only">Use Move up, Move down, and Environment controls to reorder profiles without drag and drop.</p>
         <div class="dialog-footer">
             <button id="btnDone" class="btn">Done</button>
         </div>

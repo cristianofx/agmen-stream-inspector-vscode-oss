@@ -22,17 +22,13 @@ export class StreamWatcher {
         // Initialize last seen IDs to current stream heads
         const lastIds = new Map<string, string>();
         for (const stream of streams) {
-            try {
-                const info = await this._redis.xinfo('STREAM', stream) as unknown[];
-                // xinfo returns a flat array like ['length', 5, 'last-generated-id', '123-0', ...]
-                const lastGenIdx = (info as string[]).indexOf('last-generated-id');
-                if (lastGenIdx >= 0 && lastGenIdx + 1 < info.length) {
-                    lastIds.set(stream, String(info[lastGenIdx + 1]));
-                } else {
-                    lastIds.set(stream, '0-0');
-                }
-            } catch {
-                lastIds.set(stream, '0-0');
+            const info = await this._redis.xinfo('STREAM', stream) as unknown[];
+            // xinfo returns a flat array like ['length', 5, 'last-generated-id', '123-0', ...]
+            const lastGenIdx = (info as string[]).indexOf('last-generated-id');
+            if (lastGenIdx >= 0 && lastGenIdx + 1 < info.length) {
+                lastIds.set(stream, String(info[lastGenIdx + 1]));
+            } else {
+                throw new Error(`Could not determine the latest entry id for stream '${stream}'.`);
             }
         }
 
@@ -60,18 +56,26 @@ export class StreamWatcher {
                             }
                         }
                     }
-                } catch {
-                    // Skip errors during poll (connection might be recovering)
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    throw new Error(`Watch failed for stream '${stream}': ${message}`);
                 }
             }
 
             // Wait before next poll
             if (signal?.aborted) { return; }
             await new Promise<void>((resolve) => {
-                const timer = setTimeout(resolve, this._pollIntervalMs);
+                let onAbort: (() => void) | undefined;
+                const timer = setTimeout(() => {
+                    if (signal && onAbort) {
+                        signal.removeEventListener('abort', onAbort);
+                    }
+                    resolve();
+                }, this._pollIntervalMs);
                 if (signal) {
-                    const onAbort = () => {
+                    onAbort = () => {
                         clearTimeout(timer);
+                        signal.removeEventListener('abort', onAbort);
                         resolve();
                     };
                     signal.addEventListener('abort', onAbort, { once: true });
