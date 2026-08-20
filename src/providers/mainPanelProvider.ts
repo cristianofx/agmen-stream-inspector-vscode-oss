@@ -751,7 +751,10 @@ export class MainPanelProvider implements vscode.Disposable {
                 </section>
 
                 <section class="section search-section">
-                    <label class="section-label">Search Options</label>
+                    <div class="section-heading-row">
+                        <label class="section-label">Search Options</label>
+                        <button id="btnResetFilters" class="btn btn-small" title="Reset all search and stream filters">Reset Filters</button>
+                    </div>
                     <div class="form-group">
                         <label class="form-label">Find Field</label>
                         <input type="text" id="findField" class="input-field" placeholder="Field name" />

@@ -21,7 +21,7 @@ export function createDefaultProfile(): ConnectionProfile {
     return {
         id: crypto.randomUUID(),
         name: '',
-        redisUrl: '',
+        redisUrl: 'redis://localhost:6379',
         redisUser: '',
         redisPass: '',
         sshHost: '',

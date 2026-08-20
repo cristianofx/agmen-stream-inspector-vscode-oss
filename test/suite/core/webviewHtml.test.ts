@@ -15,6 +15,8 @@ describe('webview html', () => {
         assert.ok(html.includes('script-src \'nonce-abc123\''));
         assert.ok(!html.includes('onclick='));
         assert.ok(html.includes(`src="${resource}"`));
+        assert.ok(html.includes('Search, monitor &amp; replay Redis Streams'));
+        assert.ok(html.includes('id="openInspectorBtn"'));
     });
 
     it('marks the help modal as a dialog and statuses as live regions', () => {

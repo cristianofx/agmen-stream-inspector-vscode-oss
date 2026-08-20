@@ -57,34 +57,33 @@ export class EditConnectionProvider {
             this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
 
             this._panel.webview.onDidReceiveMessage(async (msg) => {
-                const validated = validateEditConnectionMessage(msg);
-                if (!validated.ok) {
-                    this._panel?.webview.postMessage({
-                        type: 'testResult',
-                        payload: {
-                            success: false,
-                            message: validated.error,
-                        },
-                    });
-                    return;
-                }
+                try {
+                    const validated = validateEditConnectionMessage(msg);
+                    if (!validated.ok) {
+                        this._postTestResult(false, validated.error);
+                        return;
+                    }
 
-                switch (msg.type) {
-                    case 'ready':
-                        await this._sendProfile(profile, isEdit);
-                        break;
-                    case 'save':
-                        await this._onSave(msg.payload);
-                        break;
-                    case 'cancel':
-                        this._close(undefined);
-                        break;
-                    case 'testConnection':
-                        await this._testConnection(msg.payload);
-                        break;
-                    case 'browseSshKey':
-                        await this._browseSshKey();
-                        break;
+                    switch (msg.type) {
+                        case 'ready':
+                            await this._sendProfile(profile, isEdit);
+                            break;
+                        case 'save':
+                            await this._onSave(msg.payload);
+                            break;
+                        case 'cancel':
+                            this._close(undefined);
+                            break;
+                        case 'testConnection':
+                            await this._testConnection(msg.payload);
+                            break;
+                        case 'browseSshKey':
+                            await this._browseSshKey();
+                            break;
+                    }
+                } catch (error: unknown) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    this._postTestResult(false, `Operation failed: ${message}`);
                 }
             });
 
@@ -123,6 +122,13 @@ export class EditConnectionProvider {
     private async _onSave(payload: ConnectionProfile): Promise<void> {
         await this._connectionService.saveProfile(payload);
         this._close(payload);
+    }
+
+    private _postTestResult(success: boolean, message: string): void {
+        this._panel?.webview.postMessage({
+            type: 'testResult',
+            payload: { success, message },
+        });
     }
 
     private async _testConnection(payload: {

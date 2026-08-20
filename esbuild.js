@@ -10,7 +10,11 @@ const extensionConfig = {
     entryPoints: ['src/extension.ts'],
     bundle: true,
     outfile: 'dist/extension.js',
-    external: ['vscode'],
+    // ssh2 optionally loads native .node accelerators. Keep those optional
+    // requires out of the bundle so builds are reproducible on every OS;
+    // ssh2 already falls back to its JavaScript implementation when the
+    // accelerators are unavailable in the packaged extension.
+    external: ['vscode', '*.node'],
     format: 'cjs',
     platform: 'node',
     target: 'node20',

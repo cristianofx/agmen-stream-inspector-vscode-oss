@@ -55,6 +55,18 @@ body {
     color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-foreground));
 }
 
+.section-heading-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.section-heading-row .section-label {
+    margin-bottom: 0;
+}
+
 /* Buttons */
 .btn {
     display: inline-flex;
@@ -269,8 +281,14 @@ body {
     display: flex;
     justify-content: space-between;
     padding: 3px 8px;
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: var(--vscode-foreground);
     cursor: pointer;
     font-size: 12px;
+    font-family: inherit;
+    text-align: left;
     border-bottom: 1px solid var(--vscode-list-inactiveSelectionBackground, transparent);
 }
 

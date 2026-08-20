@@ -110,11 +110,86 @@ export function buildSidebarHtml(scriptUri: string, cspSource: string, nonce: st
         font-size: var(--vscode-font-size);
         color: var(--vscode-foreground);
     }
+    .logo {
+        text-align: center;
+        margin-bottom: 16px;
+    }
+    .logo svg {
+        width: 48px;
+        height: 48px;
+        stroke: var(--vscode-foreground);
+        opacity: 0.7;
+    }
+    h3 {
+        text-align: center;
+        margin: 0 0 4px 0;
+        font-weight: 600;
+    }
+    .subtitle {
+        text-align: center;
+        opacity: 0.7;
+        font-size: 0.9em;
+        margin-bottom: 20px;
+    }
+    button {
+        display: block;
+        width: 100%;
+        padding: 8px 12px;
+        margin-bottom: 8px;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 13px;
+        font-family: var(--vscode-font-family);
+    }
+    .primary {
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+    }
+    .primary:hover {
+        background: var(--vscode-button-hoverBackground);
+    }
+    .secondary {
+        background: var(--vscode-button-secondaryBackground);
+        color: var(--vscode-button-secondaryForeground);
+    }
+    .secondary:hover {
+        background: var(--vscode-button-secondaryHoverBackground);
+    }
+    .shortcut {
+        text-align: center;
+        margin-top: 16px;
+        font-size: 0.85em;
+        opacity: 0.6;
+    }
+    kbd {
+        padding: 2px 6px;
+        border-radius: 3px;
+        background: var(--vscode-keybindingLabel-background);
+        border: 1px solid var(--vscode-keybindingLabel-border);
+        color: var(--vscode-keybindingLabel-foreground);
+        font-family: var(--vscode-editor-font-family);
+        font-size: 0.9em;
+    }
 </style>
 </head>
 <body>
-    <button class="primary" id="openInspectorBtn">Open Inspector</button>
-    <button class="secondary" id="addConnectionBtn">Add Connection</button>
+    <div class="logo">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <ellipse cx="12" cy="5" rx="8" ry="3"/>
+            <path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/>
+            <path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/>
+            <line x1="9" y1="10" x2="15" y2="10"/>
+            <polyline points="13,8 15,10 13,12"/>
+        </svg>
+    </div>
+    <h3>Agmen Stream Inspector</h3>
+    <p class="subtitle">Search, monitor &amp; replay Redis Streams</p>
+
+    <button class="primary" id="openInspectorBtn" type="button">Open Inspector</button>
+    <button class="secondary" id="addConnectionBtn" type="button">Add Connection</button>
+
+    <p class="shortcut"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> to open</p>
     <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

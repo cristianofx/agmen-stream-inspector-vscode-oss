@@ -32,6 +32,10 @@ class FakeSecretStorage {
 }
 
 describe('ConnectionService', () => {
+    it('prefills new profiles with the local Redis endpoint', () => {
+        assert.strictEqual(createDefaultProfile().redisUrl, 'redis://localhost:6379');
+    });
+
     it('removes passwords from persisted redis URLs and stores them in SecretStorage', async () => {
         const store = new ConnectionProfileStore(new FakeMemento() as never, new FakeSecretStorage() as never);
         const service = new ConnectionService(store);

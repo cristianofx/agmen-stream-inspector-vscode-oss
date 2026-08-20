@@ -51,6 +51,7 @@ bindClick('btnFetchStreams', () => {
 });
 bindClick('btnSelectAll', () => selectAllStreams(true));
 bindClick('btnDeselectAll', () => selectAllStreams(false));
+bindClick('btnResetFilters', resetFilters);
 
 bindClick('btnSearch', () => sendSearchCommand('startSearch'));
 bindClick('btnWatch', () => sendSearchCommand('startWatch'));
@@ -172,6 +173,32 @@ function getSelectedStreams(): string[] {
         if (name) { streams.push(name); }
     });
     return streams;
+}
+
+function resetFilters() {
+    const findField = document.getElementById('findField') as HTMLInputElement | null;
+    const findEq = document.getElementById('findEq') as HTMLInputElement | null;
+    const jsonField = document.getElementById('jsonField') as HTMLInputElement | null;
+    const rootOperator = document.getElementById('rootOperator') as HTMLSelectElement | null;
+    const conditionsList = document.getElementById('conditionsList');
+    const nestedGroupsList = document.getElementById('nestedGroupsList');
+
+    streamFilter.value = '';
+    streamFilter.dispatchEvent(new Event('input'));
+    if (findField) { findField.value = ''; }
+    if (findEq) { findEq.value = ''; }
+    if (jsonField) { jsonField.value = 'message'; }
+    if (rootOperator) { rootOperator.value = 'And'; }
+    if (conditionsList) { conditionsList.innerHTML = ''; }
+    if (nestedGroupsList) { nestedGroupsList.innerHTML = ''; }
+    conditionIdCounter = 0;
+    groupIdCounter = 0;
+    if (useAdvancedFiltersCheckbox) {
+        useAdvancedFiltersCheckbox.checked = false;
+    }
+    if (advancedFiltersSection) {
+        advancedFiltersSection.style.display = 'none';
+    }
 }
 
 // --- Conditional Filter Functions ---
@@ -395,6 +422,13 @@ function sendSearchCommand(type: 'startSearch' | 'startWatch') {
     const useAdvancedFilters = useAdvancedFiltersCheckbox?.checked || false;
     const conditionalFilter = buildConditionalFilter();
 
+    // A new Find or Watch starts a new result set. Clear the previous set
+    // immediately, while leaving it intact when an active operation is
+    // canceled so the user can continue inspecting those messages.
+    if (streams.length > 0) {
+        clearResults();
+    }
+
     vscode.postMessage({
         type,
         payload: {
@@ -568,7 +602,6 @@ window.addEventListener('message', (event) => {
             statusText.textContent = msg.payload.status;
             statusText.className = `status-text status-${msg.payload.statusType}`;
             if (msg.payload.statusType === 'searching' || msg.payload.statusType === 'watching') {
-                clearResults();
                 setSearchButtons(true);
             } else if (msg.payload.statusType === 'connecting') {
                 setSearchButtons(true);

@@ -83,7 +83,9 @@ function updateValidation(): void {
 function updateCanAccept(): void {
     const nameOk = (nameInput.value || '').trim().length > 0;
     btnOk.disabled = !(nameOk && isRedisUrlValid);
-    btnTestConnection.disabled = !isRedisUrlValid || isTesting;
+    // Let the extension-side validator report invalid endpoints instead of
+    // leaving Test Connection silently disabled when webview state is stale.
+    btnTestConnection.disabled = !(redisUrlInput.value || '').trim() || isTesting;
 }
 
 // --- Event Listeners ---
@@ -119,7 +121,7 @@ btnOk.addEventListener('click', () => {
 });
 
 btnTestConnection.addEventListener('click', () => {
-    if (!isRedisUrlValid || isTesting) { return; }
+    if (isTesting) { return; }
     vscode.postMessage({
         type: 'testConnection',
         payload: {
@@ -196,6 +198,8 @@ window.addEventListener('message', (event: MessageEvent) => {
             break;
     }
 });
+
+updateValidation();
 
 // Signal ready
 vscode.postMessage({ type: 'ready' });
