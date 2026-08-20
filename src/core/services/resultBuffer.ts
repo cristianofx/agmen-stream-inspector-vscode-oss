@@ -1,10 +1,14 @@
 import { SearchHit } from '../models/searchHit';
 
-export class WatchResultBuffer {
+/** Keeps the results exposed to the webview and replay actions within a fixed memory budget. */
+export class ResultBuffer {
     private readonly _items: SearchHit[] = [];
     private _droppedCount = 0;
+    private readonly _maxItems: number;
 
-    constructor(private readonly _maxItems: number) {}
+    constructor(maxItems: number) {
+        this._maxItems = Math.max(1, maxItems);
+    }
 
     push(hit: SearchHit): void {
         this._items.push(hit);

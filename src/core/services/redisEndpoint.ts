@@ -143,10 +143,10 @@ function parsePort(rawPort: string): number {
     }
 
     const port = parseInt(rawPort, 10);
-    if (port < 0 || port > 65535) {
+    if (port <= 0 || port > 65535) {
         throw new RedisEndpointParseError('Port out of range.');
     }
-    return port === 0 ? DEFAULT_REDIS_PORT : port;
+    return port;
 }
 
 function withDefaultPort(url: URL, port: number): URL {

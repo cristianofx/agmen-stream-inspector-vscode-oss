@@ -95,12 +95,12 @@
           "maximum": 5000,
           "description": "Watch mode polling interval in milliseconds"
         },
-        "redisInspector.watchRetentionMaxResults": {
+        "redisInspector.resultRetentionMaxResults": {
           "type": "number",
           "default": 1000,
           "minimum": 100,
           "maximum": 10000,
-          "description": "Maximum number of watch-mode results retained in memory and rendered in the webview"
+          "description": "Maximum number of Find and Watch results retained in memory and rendered in the webview"
         }
       }
     }

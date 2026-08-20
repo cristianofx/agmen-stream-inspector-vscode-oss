@@ -12,7 +12,7 @@ This file records verification performed in the `fix/audit-remediation` worktree
 - `xvfb-run -a npm run test:vscode` — passed; 1 VS Code smoke test passed and the extension host exited with code 0.
 - `npm run build` — passed.
 - `npm run package` — passed; generated `agmen-stream-inspector-1.2.0.vsix`.
-- `npx vsce ls` — passed; the package contains 20 files and no `node_modules`, source files, tests, TypeScript files, or source maps.
+- `npx vsce ls` — passed; the package contains no `node_modules`, source files, tests, TypeScript files, or source maps; runtime dependencies are bundled into `dist/extension.js`.
 - `npm audit --json` — passed; 0 vulnerabilities across the installed graph.
 - `npm audit --omit=dev` — passed; 0 production vulnerabilities.
 - `git diff --check` — passed.

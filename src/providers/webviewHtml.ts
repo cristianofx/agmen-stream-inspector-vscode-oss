@@ -95,7 +95,7 @@ export function buildReplayDialogHtml(scriptUri: string, styleUri: string, cspSo
 </html>`;
 }
 
-export function buildSidebarHtml(cspSource: string, nonce: string): string {
+export function buildSidebarHtml(scriptUri: string, cspSource: string, nonce: string): string {
     return /* html */ `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -115,7 +115,7 @@ export function buildSidebarHtml(cspSource: string, nonce: string): string {
 <body>
     <button class="primary" id="openInspectorBtn">Open Inspector</button>
     <button class="secondary" id="addConnectionBtn">Add Connection</button>
-    <script nonce="${nonce}" src="sidebar.js"></script>
+    <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
 }

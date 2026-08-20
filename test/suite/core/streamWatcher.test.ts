@@ -62,4 +62,32 @@ describe('StreamWatcher', () => {
         assert.ok(maxObservedListeners <= 1, `expected at most one abort listener, saw ${maxObservedListeners}`);
         assert.strictEqual(getEventListeners(controller.signal, 'abort').length, 0);
     });
+
+    it('reports and retries a transient polling error', async () => {
+        const controller = new AbortController();
+        let attempts = 0;
+        const redis = new FakeWatchRedis(controller);
+        redis.xread = async () => {
+            attempts += 1;
+            if (attempts === 1) {
+                throw new Error('temporary connection failure');
+            }
+            controller.abort();
+            return null;
+        };
+        const recoverableErrors: string[] = [];
+        const watcher = new StreamWatcher(
+            redis as never,
+            createSearchOptions({ streams: ['alpha'] }),
+            1,
+            (error, stream, phase) => recoverableErrors.push(`${phase}:${stream}:${error.message}`),
+        );
+
+        for await (const _hit of watcher.watchAsync(controller.signal)) {
+            assert.fail(`Expected no hits, received ${JSON.stringify(_hit)}`);
+        }
+
+        assert.strictEqual(attempts, 2);
+        assert.deepStrictEqual(recoverableErrors, ['poll:alpha:temporary connection failure']);
+    });
 });

@@ -4,15 +4,13 @@ const fs = require('fs');
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
-const { dependencies = {} } = require('./package.json');
-const externalRuntimeDeps = ['vscode', ...Object.keys(dependencies)];
 
 /** @type {esbuild.BuildOptions} */
 const extensionConfig = {
     entryPoints: ['src/extension.ts'],
     bundle: true,
     outfile: 'dist/extension.js',
-    external: externalRuntimeDeps,
+    external: ['vscode'],
     format: 'cjs',
     platform: 'node',
     target: 'node20',

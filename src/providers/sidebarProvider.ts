@@ -33,11 +33,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     }
 
     private _getHtml(webview: vscode.Webview, nonce: string): string {
-        const html = buildSidebarHtml(webview.cspSource, nonce);
         const scriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'sidebar.js')
         ).toString();
-        return html.replace('sidebar.js', scriptUri);
+        return buildSidebarHtml(scriptUri, webview.cspSource, nonce);
     }
 }
 

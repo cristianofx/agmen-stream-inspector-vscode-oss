@@ -138,8 +138,11 @@ function stripFingerprintPrefix(fingerprint: string): string {
 }
 
 async function resolveTrustedFingerprint(opts: SshTunnelOptions): Promise<string> {
+    if (opts.sshHostKeyFingerprint) {
+        return opts.sshHostKeyFingerprint;
+    }
     if (!opts.hostKeyVerifier) {
-        return opts.sshHostKeyFingerprint!;
+        throw new Error('SSH host fingerprint is required for secure tunneling.');
     }
 
     const discoveredFingerprint = await discoverHostFingerprint(opts);

@@ -10,10 +10,11 @@ describe('webview html', () => {
     const resource = 'vscode-resource:/test.js';
 
     it('applies CSP and removes inline script from the sidebar view', () => {
-        const html = buildSidebarHtml('vscode-resource:/root', 'abc123');
+        const html = buildSidebarHtml(resource, 'vscode-resource:/root', 'abc123');
         assert.ok(html.includes('Content-Security-Policy'));
         assert.ok(html.includes('script-src \'nonce-abc123\''));
         assert.ok(!html.includes('onclick='));
+        assert.ok(html.includes(`src="${resource}"`));
     });
 
     it('marks the help modal as a dialog and statuses as live regions', () => {

@@ -12,7 +12,7 @@ import { buildRedisOptions } from '../core/services/redisConnectionBuilder';
 import { SshTunnel } from '../core/services/sshTunnel';
 import { parseRedisEndpoint } from '../core/services/redisEndpoint';
 import { validateMainPanelMessage } from '../core/security/webviewMessageValidator';
-import { WatchResultBuffer } from '../core/services/watchResultBuffer';
+import { ResultBuffer } from '../core/services/resultBuffer';
 import { WebviewToExtension, ExtensionToWebview, SearchOptionsDto } from '../webview/shared/messageProtocol';
 import { EditConnectionProvider } from './editConnectionProvider';
 import { ReplayDialogProvider } from './replayDialogProvider';
@@ -273,7 +273,8 @@ export class MainPanelProvider implements vscode.Disposable {
 
         this._abortController = new AbortController();
         const signal = this._abortController.signal;
-        this._resultRetentionLimit = Number.MAX_SAFE_INTEGER;
+        const retentionMax = this._getResultRetentionLimit();
+        this._resultRetentionLimit = retentionMax;
         this._results = [];
         this._sendToWebview({
             type: 'stateUpdate',
@@ -307,12 +308,14 @@ export class MainPanelProvider implements vscode.Disposable {
             const runner = new SearchRunner(this._redis, opts);
             const startTime = Date.now();
             let count = 0;
+            const buffer = new ResultBuffer(retentionMax);
 
             this._sendToWebview({ type: 'statusUpdate', payload: { status: 'Searching...', statusType: 'searching' } });
 
             for await (const hit of runner.runAsync(signal)) {
                 if (signal.aborted) { break; }
-                this._results.push(hit);
+                buffer.push(hit);
+                this._results = [...buffer.items];
                 count++;
                 this._sendToWebview({ type: 'searchResult', payload: hit });
             }
@@ -324,7 +327,14 @@ export class MainPanelProvider implements vscode.Disposable {
             });
             this._sendToWebview({
                 type: 'statusUpdate',
-                payload: { status: count === 0 ? 'No matches' : 'Done', statusType: count === 0 ? 'noMatches' : 'done' },
+                payload: {
+                    status: count === 0
+                        ? 'No matches'
+                        : buffer.droppedCount > 0
+                            ? `Done (retained latest ${this._results.length} of ${count} results)`
+                            : 'Done',
+                    statusType: count === 0 ? 'noMatches' : 'done',
+                },
             });
 
         } catch (ex: unknown) {
@@ -369,7 +379,7 @@ export class MainPanelProvider implements vscode.Disposable {
             this._sshTunnel = connResult.tunnel;
 
             const pollInterval = vscode.workspace.getConfiguration('redisInspector').get<number>('pollIntervalMs', 100);
-            const retentionMax = vscode.workspace.getConfiguration('redisInspector').get<number>('watchRetentionMaxResults', 1000);
+            const retentionMax = this._getResultRetentionLimit();
             this._resultRetentionLimit = retentionMax;
             this._sendToWebview({
                 type: 'stateUpdate',
@@ -393,8 +403,15 @@ export class MainPanelProvider implements vscode.Disposable {
                 conditionalFilter: dto.conditionalFilter,
             });
 
-            const watcher = new StreamWatcher(this._redis, opts, pollInterval);
-            const buffer = new WatchResultBuffer(retentionMax);
+            const watcher = new StreamWatcher(this._redis, opts, pollInterval, (error, stream, phase) => {
+                const prefix = phase === 'initialize' ? 'initializing' : 'polling';
+                this._outputChannel.appendLine(`Watch ${prefix} issue for '${stream}': ${error.message}; retrying.`);
+                this._sendToWebview({
+                    type: 'statusUpdate',
+                    payload: { status: `Watch connection issue for '${stream}'; retrying...`, statusType: 'watching' },
+                });
+            });
+            const buffer = new ResultBuffer(retentionMax);
             let emitted = 0;
 
             this._sendToWebview({ type: 'statusUpdate', payload: { status: 'Watching...', statusType: 'watching' } });
@@ -646,6 +663,13 @@ export class MainPanelProvider implements vscode.Disposable {
 
     private _isKnownProfileId(profileId: string): boolean {
         return this._profiles.some((profile) => profile.id === profileId);
+    }
+
+    private _getResultRetentionLimit(): number {
+        const configured = vscode.workspace.getConfiguration('redisInspector').get<number>('resultRetentionMaxResults', 1000);
+        return Number.isInteger(configured) && configured >= 100 && configured <= 10000
+            ? configured
+            : 1000;
     }
 
     private async _confirmReplayTarget(

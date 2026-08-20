@@ -16,4 +16,9 @@ describe('redis endpoint validation', () => {
         const result = validateRedisUrl('[::1]:6379');
         assert.strictEqual(result.valid, true);
     });
+
+    it('rejects port zero instead of silently using the default port', () => {
+        assert.strictEqual(validateRedisUrl('localhost:0').valid, false);
+        assert.strictEqual(validateRedisUrl('redis://localhost:0').valid, false);
+    });
 });

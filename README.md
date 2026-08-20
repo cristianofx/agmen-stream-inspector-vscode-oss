@@ -29,7 +29,7 @@ account, activation key, subscription, or external entitlement service.
 
 - Watch streams in real time with a configurable polling interval
 - Display new messages automatically as they arrive
-- Retain a bounded watch buffer to avoid unbounded host/webview memory growth
+- Retain a bounded result buffer in Find and Watch modes to avoid unbounded host/webview memory growth
 - Efficient polling through Redis `XREAD`
 
 ### Connection management
@@ -90,7 +90,7 @@ account, activation key, subscription, or external entitlement service.
 | --- | --- | --- |
 | `redisInspector.defaultJsonField` | `message` | Stream field containing the JSON payload |
 | `redisInspector.pollIntervalMs` | `100` | Watch polling interval in milliseconds, from 50 to 5000 |
-| `redisInspector.watchRetentionMaxResults` | `1000` | Maximum number of watch-mode results retained and rendered |
+| `redisInspector.resultRetentionMaxResults` | `1000` | Maximum number of Find and Watch results retained and rendered |
 
 ## Connection URL format
 

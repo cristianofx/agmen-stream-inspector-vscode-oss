@@ -13,6 +13,7 @@ export class StreamWatcher {
         private readonly _redis: Redis,
         private readonly _opts: SearchOptions,
         private readonly _pollIntervalMs: number = 100,
+        private readonly _onRecoverableError?: (error: Error, stream: string, phase: 'initialize' | 'poll') => void,
     ) {}
 
     async *watchAsync(signal?: AbortSignal): AsyncGenerator<SearchHit> {
@@ -22,13 +23,23 @@ export class StreamWatcher {
         // Initialize last seen IDs to current stream heads
         const lastIds = new Map<string, string>();
         for (const stream of streams) {
-            const info = await this._redis.xinfo('STREAM', stream) as unknown[];
-            // xinfo returns a flat array like ['length', 5, 'last-generated-id', '123-0', ...]
-            const lastGenIdx = (info as string[]).indexOf('last-generated-id');
-            if (lastGenIdx >= 0 && lastGenIdx + 1 < info.length) {
-                lastIds.set(stream, String(info[lastGenIdx + 1]));
-            } else {
-                throw new Error(`Could not determine the latest entry id for stream '${stream}'.`);
+            try {
+                const info = await this._redis.xinfo('STREAM', stream) as unknown[];
+                // xinfo returns a flat array like ['length', 5, 'last-generated-id', '123-0', ...]
+                const lastGenIdx = (info as string[]).indexOf('last-generated-id');
+                if (lastGenIdx >= 0 && lastGenIdx + 1 < info.length) {
+                    lastIds.set(stream, String(info[lastGenIdx + 1]));
+                } else {
+                    lastIds.set(stream, '0-0');
+                    this._reportRecoverableError(
+                        new Error(`Could not determine the latest entry id for stream '${stream}'.`),
+                        stream,
+                        'initialize',
+                    );
+                }
+            } catch (error) {
+                lastIds.set(stream, '0-0');
+                this._reportRecoverableError(toError(error), stream, 'initialize');
             }
         }
 
@@ -57,8 +68,7 @@ export class StreamWatcher {
                         }
                     }
                 } catch (error) {
-                    const message = error instanceof Error ? error.message : String(error);
-                    throw new Error(`Watch failed for stream '${stream}': ${message}`);
+                    this._reportRecoverableError(toError(error), stream, 'poll');
                 }
             }
 
@@ -83,4 +93,16 @@ export class StreamWatcher {
             });
         }
     }
+
+    private _reportRecoverableError(error: Error, stream: string, phase: 'initialize' | 'poll'): void {
+        try {
+            this._onRecoverableError?.(error, stream, phase);
+        } catch {
+            // Reporting a transient watch error must not stop the watch loop.
+        }
+    }
+}
+
+function toError(error: unknown): Error {
+    return error instanceof Error ? error : new Error(String(error));
 }
