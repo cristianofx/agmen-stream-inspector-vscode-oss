@@ -29,7 +29,7 @@ export interface SearchOptions {
     jsonPath: string | undefined;
     /** If true, only emit the raw JSON from jsonField for each hit. */
     messageOnly: boolean;
-    /** Advanced conditional filter. When set, takes precedence over findField/findEq. */
+    /** Advanced conditional filter. When set, it is combined with findField/findEq using AND semantics. */
     conditionalFilter?: ConditionalFilterGroup;
 }
 

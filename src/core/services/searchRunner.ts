@@ -36,17 +36,30 @@ export class SearchRunner {
         for (const stream of streams) {
             if (remaining <= 0 || signal?.aborted) { return; }
 
+            const startedWith = remaining;
             if (this._opts.findLast > 0) {
-                yield* this._scanTail(stream, remaining, signal);
+                for await (const hit of this._scanTail(stream, remaining, signal)) {
+                    remaining -= 1;
+                    yield hit;
+                    if (remaining <= 0) { return; }
+                }
             } else if (this._opts.newestFirst) {
-                yield* this._scanDescending(stream, remaining, signal);
+                for await (const hit of this._scanDescending(stream, remaining, signal)) {
+                    remaining -= 1;
+                    yield hit;
+                    if (remaining <= 0) { return; }
+                }
             } else {
-                yield* this._scanAscending(stream, remaining, signal);
+                for await (const hit of this._scanAscending(stream, remaining, signal)) {
+                    remaining -= 1;
+                    yield hit;
+                    if (remaining <= 0) { return; }
+                }
             }
 
-            // Recalculate remaining (we can't easily track across generators,
-            // so we track it here by re-counting)
-            // Actually, we need to track across yields. Let's refactor slightly.
+            if (remaining === startedWith) {
+                continue;
+            }
         }
     }
 

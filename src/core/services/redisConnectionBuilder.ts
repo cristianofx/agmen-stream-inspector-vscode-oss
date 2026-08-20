@@ -1,4 +1,5 @@
 import type { RedisOptions } from 'ioredis';
+import { parseRedisEndpoint } from './redisEndpoint';
 
 export const DEFAULT_CONNECT_TIMEOUT_MS = 5000;
 export const DEFAULT_SYNC_TIMEOUT_MS = 5000;
@@ -31,38 +32,12 @@ export function buildRedisOptions(
         },
     };
 
-    const uriLike = redisUrl.toLowerCase().startsWith('redis://') ||
-                    redisUrl.toLowerCase().startsWith('rediss://');
-
-    let useTls = false;
-    let redisPassword: string | undefined;
-    let redisUser: string | undefined;
-    let urlHost: string | undefined;
-    let urlPort = -1;
-
-    if (uriLike) {
-        const u = new URL(redisUrl);
-        urlHost = u.hostname || undefined;
-        urlPort = u.port ? parseInt(u.port, 10) : -1;
-        useTls = u.protocol === 'rediss:';
-
-        if (u.username || u.password) {
-            if (u.username && u.password) {
-                redisUser = decodeURIComponent(u.username);
-                redisPassword = decodeURIComponent(u.password);
-            } else if (u.password) {
-                redisPassword = decodeURIComponent(u.password);
-            } else if (u.username) {
-                // Could be just password (redis://:password@host)
-                redisUser = decodeURIComponent(u.username);
-            }
-        }
-    } else {
-        const parts = redisUrl.split(':').map(p => p.trim()).filter(p => p.length > 0);
-        urlHost = parts.length > 0 ? parts[0] : undefined;
-        urlPort = parts.length > 1 ? parseInt(parts[1], 10) : -1;
-        if (isNaN(urlPort)) { urlPort = -1; }
-    }
+    const endpoint = parseRedisEndpoint(redisUrl);
+    const urlHost = endpoint.host;
+    const urlPort = endpoint.port;
+    const useTls = endpoint.tls;
+    const redisPassword = endpoint.password;
+    const redisUser = endpoint.username;
 
     if (tunnel) {
         opts.host = tunnel.localHost;

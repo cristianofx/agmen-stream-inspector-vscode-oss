@@ -22,13 +22,14 @@ account, activation key, subscription, or external entitlement service.
 - Combine multiple field conditions with AND/OR logic
 - Equals, Not Equals, Contains, and Exists operators
 - Nested groups with independent combinators for complex queries
-- Use a basic field match as a pre-filter before advanced conditions
+- Apply the basic field match first, then the advanced group with AND semantics
 - Built-in examples and help in the filter editor
 
 ### Real-time monitoring
 
 - Watch streams in real time with a configurable polling interval
 - Display new messages automatically as they arrive
+- Retain a bounded result buffer in Find and Watch modes to avoid unbounded host/webview memory growth
 - Efficient polling through Redis `XREAD`
 
 ### Connection management
@@ -36,9 +37,10 @@ account, activation key, subscription, or external entitlement service.
 - Multiple connection profiles with Dev, Test, and Prod labels
 - Color-coded environments
 - SSH tunnels with password or private-key authentication
+- SSH trust-on-first-use confirmation with persisted `SHA256:...` host fingerprints and mismatch blocking
 - Redis and SSH passwords stored through VS Code SecretStorage
 - Connection testing before save
-- Drag-and-drop profile reordering
+- Keyboard-accessible profile reordering
 
 ### Message tools
 
@@ -69,8 +71,9 @@ account, activation key, subscription, or external entitlement service.
 1. Select **+ Add** in the Connection section.
 2. Enter a name and Redis URL, such as `redis://localhost:6379`.
 3. Optionally configure authentication or an SSH tunnel.
-4. Test and save the connection.
-5. Fetch the available streams, select one or more, configure the search, and select **Find** or **Watch**.
+4. If you use SSH, test the tunnel. On first use the extension will show the bastion fingerprint and ask whether to trust and save it.
+5. Save the connection.
+6. Fetch the available streams, select one or more, configure the search, and select **Find** or **Watch**.
 
 ## Commands
 
@@ -87,6 +90,7 @@ account, activation key, subscription, or external entitlement service.
 | --- | --- | --- |
 | `redisInspector.defaultJsonField` | `message` | Stream field containing the JSON payload |
 | `redisInspector.pollIntervalMs` | `100` | Watch polling interval in milliseconds, from 50 to 5000 |
+| `redisInspector.resultRetentionMaxResults` | `1000` | Maximum number of Find and Watch results retained and rendered |
 
 ## Connection URL format
 
@@ -98,10 +102,20 @@ rediss://[[username:]password@]host[:port][/db]
 ```
 
 The default Redis port is `6379`. Use `rediss://` for TLS-encrypted connections.
+For simple endpoints, use `host`, `host:port`, `[ipv6]`, or `[ipv6]:port`. Ambiguous forms such as `host:6379:6380` are rejected.
 
 For a server accessible only through SSH, enable **SSH Tunnel** in the connection
 editor, enter the bastion details, and choose password or private-key
-authentication. The extension creates a local tunnel for the Redis connection.
+authentication. On first use the extension shows the presented bastion host
+fingerprint, asks whether to trust it, and saves the accepted `SHA256:...`
+fingerprint to the profile. Future connections fail closed if the fingerprint
+changes.
+
+## Workspace trust
+
+The extension is disabled in untrusted workspaces. It opens outbound Redis and
+SSH connections and can replay messages to target Redis servers, so it does not
+run in VS Code restricted mode.
 
 ## Development
 
@@ -116,8 +130,13 @@ authentication. The extension creates a local tunnel for the Redis connection.
 git clone https://github.com/cristianofx/agmen-stream-inspector-vscode-oss.git
 cd agmen-stream-inspector-vscode-oss
 npm ci
+npm run lint
+npm run typecheck
+npm run typecheck:webview
+npm run test:unit
+xvfb-run -a npm run test:vscode   # Linux
 npm run build
-npm test
+npm audit
 ```
 
 Press `F5` in VS Code to open an Extension Development Host. To produce an
@@ -126,6 +145,9 @@ installable extension package, run:
 ```bash
 npm run package
 ```
+
+Tagged releases also generate a CycloneDX SBOM and `SHA256SUMS.txt` through
+`.github/workflows/release.yml`.
 
 ### Project structure
 
@@ -150,6 +172,12 @@ test/
 - esbuild
 - VS Code Webview API and SecretStorage
 - Mocha
+
+## Security and governance
+
+- See `SECURITY.md` for private vulnerability reporting.
+- See `CONTRIBUTING.md` for the contributor workflow and release checklist.
+- See `SUPPORT.md` for support expectations.
 
 ## License
 

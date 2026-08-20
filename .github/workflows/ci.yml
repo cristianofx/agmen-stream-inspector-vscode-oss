@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  verify:
+    # The release workflow packages the VSIX on Ubuntu. Keep CI aligned with
+    # that artifact-producing environment while avoiding duplicate OS runs.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Host typecheck
+        run: npm run typecheck
+
+      - name: Webview typecheck
+        run: npm run typecheck:webview
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Build
+        run: npm run build
+
+      - name: Production audit
+        run: npm audit --omit=dev
+
+      - name: VS Code smoke test
+        run: xvfb-run -a npm run test:vscode
+
+      - name: Package VSIX
+        run: npm run package
+
+      - name: Inspect VSIX contents
+        shell: bash
+        run: |
+          npx vsce ls
+          unzip -l *.vsix

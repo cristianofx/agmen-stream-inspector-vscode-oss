@@ -1,5 +1,7 @@
 import Redis from 'ioredis';
 
+const SCAN_COUNT = 1000;
+
 /**
  * Checks if the input string contains glob pattern characters.
  */
@@ -17,20 +19,31 @@ export async function resolveStreamsAsync(
     signal?: AbortSignal,
 ): Promise<string[]> {
     const keys = new Set<string>();
+    const hasPatternInput = inputs.some(isPattern);
+    const useScanType = hasPatternInput ? await supportsScanType(redis) : false;
 
     for (const item of inputs) {
         if (signal?.aborted) { break; }
 
         if (isPattern(item)) {
-            const stream = redis.scanStream({ match: item, count: 1000 });
-            for await (const batch of stream) {
+            let cursor = '0';
+            do {
                 if (signal?.aborted) { break; }
-                for (const k of batch as string[]) {
-                    if (await isStreamAsync(redis, k)) {
-                        keys.add(k);
+                const [nextCursor, batch] = useScanType
+                    ? await redis.scan(cursor, 'MATCH', item, 'COUNT', String(SCAN_COUNT), 'TYPE', 'stream')
+                    : await redis.scan(cursor, 'MATCH', item, 'COUNT', String(SCAN_COUNT));
+
+                if (useScanType) {
+                    for (const key of batch) {
+                        keys.add(key);
+                    }
+                } else {
+                    for (const key of await filterStreamKeys(redis, batch)) {
+                        keys.add(key);
                     }
                 }
-            }
+                cursor = nextCursor;
+            } while (cursor !== '0');
         } else {
             if (await isStreamAsync(redis, item)) {
                 keys.add(item);
@@ -42,10 +55,43 @@ export async function resolveStreamsAsync(
 }
 
 async function isStreamAsync(redis: Redis, key: string): Promise<boolean> {
+    const type = await redis.type(key);
+    return type === 'stream';
+}
+
+async function supportsScanType(redis: Redis): Promise<boolean> {
     try {
-        const type = await redis.type(key);
-        return type === 'stream';
-    } catch {
-        return false;
+        await redis.scan('0', 'MATCH', '__redisInspectorNeverMatches__', 'COUNT', '1', 'TYPE', 'stream');
+        return true;
+    } catch (error) {
+        if (isUnsupportedScanTypeError(error)) {
+            return false;
+        }
+        throw error;
     }
+}
+
+async function filterStreamKeys(redis: Redis, keys: string[]): Promise<string[]> {
+    if (keys.length === 0) {
+        return [];
+    }
+
+    const pipeline = redis.pipeline();
+    for (const key of keys) {
+        pipeline.type(key);
+    }
+
+    const results = await pipeline.exec();
+    if (!results) {
+        throw new Error('Redis pipeline returned no results while resolving streams.');
+    }
+    return results
+        .map((result, index) => ({ result, key: keys[index] }))
+        .filter(({ result }) => result[0] == null && result[1] === 'stream')
+        .map(({ key }) => key);
+}
+
+function isUnsupportedScanTypeError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /syntax/i.test(message) || /wrong number of arguments/i.test(message);
 }

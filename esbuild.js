@@ -10,7 +10,11 @@ const extensionConfig = {
     entryPoints: ['src/extension.ts'],
     bundle: true,
     outfile: 'dist/extension.js',
-    external: ['vscode'],
+    // ssh2 optionally loads native .node accelerators. Keep those optional
+    // requires out of the bundle so builds are reproducible on every OS;
+    // ssh2 already falls back to its JavaScript implementation when the
+    // accelerators are unavailable in the packaged extension.
+    external: ['vscode', '*.node'],
     format: 'cjs',
     platform: 'node',
     target: 'node20',
@@ -23,9 +27,10 @@ const extensionConfig = {
 function getWebviewEntryPoints() {
     const webviewDir = path.join(__dirname, 'src', 'webview');
     const entries = {};
-    const dirs = ['main', 'editConnection', 'replayDialog', 'manageProfiles'];
+    const dirs = ['main', 'editConnection', 'replayDialog', 'manageProfiles', 'sidebar'];
     for (const dir of dirs) {
-        const tsFile = path.join(webviewDir, dir, `${dir === 'main' ? 'main' : dir}.ts`);
+        const baseName = dir === 'main' ? 'main' : dir;
+        const tsFile = path.join(webviewDir, dir, `${baseName}.ts`);
         if (fs.existsSync(tsFile)) {
             entries[dir] = tsFile;
         }
@@ -50,7 +55,7 @@ function copyWebviewAssets() {
     // Copy CSS files from webview source directories to dist/webview
     const webviewDir = path.join(__dirname, 'src', 'webview');
     const distWebview = path.join(__dirname, 'dist', 'webview');
-    const dirs = ['main', 'editConnection', 'replayDialog', 'manageProfiles'];
+    const dirs = ['main', 'editConnection', 'replayDialog', 'manageProfiles', 'sidebar'];
     for (const dir of dirs) {
         const srcDir = path.join(webviewDir, dir);
         if (!fs.existsSync(srcDir)) { continue; }

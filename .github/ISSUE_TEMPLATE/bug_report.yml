@@ -1,0 +1,22 @@
+name: Bug report
+description: Report a defect in Agmen Stream Inspector
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, VS Code version, extension version, Redis version, and whether SSH/TLS is involved.

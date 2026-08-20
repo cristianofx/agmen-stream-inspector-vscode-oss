@@ -69,7 +69,17 @@ function renderProfiles(): void {
             div.className = 'profile-item';
             div.setAttribute('draggable', 'true');
             div.setAttribute('data-id', p.id);
-            div.innerHTML = `<span class="drag-handle">&#9776;</span><span class="profile-name">${escapeHtml(p.name)}</span>`;
+            div.innerHTML = `<span class="drag-handle" aria-hidden="true">&#9776;</span>
+                <span class="profile-name">${escapeHtml(p.name)}</span>
+                <div class="profile-actions">
+                    <button type="button" class="move-up-btn btn btn-small" aria-label="Move up ${escapeHtml(p.name)}">Move up</button>
+                    <button type="button" class="move-down-btn btn btn-small" aria-label="Move down ${escapeHtml(p.name)}">Move down</button>
+                    <select class="env-select input-field" aria-label="Move ${escapeHtml(p.name)} to environment">
+                        <option value="0"${p.environment === 0 ? ' selected' : ''}>Dev</option>
+                        <option value="1"${p.environment === 1 ? ' selected' : ''}>Test</option>
+                        <option value="2"${p.environment === 2 ? ' selected' : ''}>Prod</option>
+                    </select>
+                </div>`;
 
             // Drag events
             div.addEventListener('dragstart', (e) => {
@@ -113,6 +123,17 @@ function renderProfiles(): void {
                 reorderProfile(draggedId, p.id, insertBefore, p.environment);
             });
 
+            (div.querySelector('.move-up-btn') as HTMLButtonElement).addEventListener('click', () => {
+                moveProfileWithinEnvironment(p.id, -1);
+            });
+            (div.querySelector('.move-down-btn') as HTMLButtonElement).addEventListener('click', () => {
+                moveProfileWithinEnvironment(p.id, 1);
+            });
+            (div.querySelector('.env-select') as HTMLSelectElement).addEventListener('change', (event) => {
+                const target = event.target as HTMLSelectElement;
+                moveProfileToEnvironment(p.id, parseInt(target.value, 10));
+            });
+
             list.appendChild(div);
         }
     }
@@ -151,6 +172,40 @@ function clearDropIndicators(): void {
     });
 }
 
+function moveProfileWithinEnvironment(profileId: string, direction: -1 | 1): void {
+    const profile = profiles.find((candidate) => candidate.id === profileId);
+    if (!profile) { return; }
+
+    const envProfiles = profiles
+        .filter((candidate) => candidate.environment === profile.environment)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+    const index = envProfiles.findIndex((candidate) => candidate.id === profileId);
+    const targetIndex = index + direction;
+    if (index < 0 || targetIndex < 0 || targetIndex >= envProfiles.length) { return; }
+
+    const [moved] = envProfiles.splice(index, 1);
+    envProfiles.splice(targetIndex, 0, moved);
+    envProfiles.forEach((candidate, order) => {
+        candidate.sortOrder = order;
+    });
+    renderProfiles();
+}
+
+function moveProfileToEnvironment(profileId: string, environment: number): void {
+    const profile = profiles.find((candidate) => candidate.id === profileId);
+    if (!profile) { return; }
+
+    profile.environment = environment;
+    const envProfiles = profiles
+        .filter((candidate) => candidate.environment === environment && candidate.id !== profileId)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+    envProfiles.push(profile);
+    envProfiles.forEach((candidate, order) => {
+        candidate.sortOrder = order;
+    });
+    renderProfiles();
+}
+
 function escapeHtml(str: string): string {
     const div = document.createElement('div');
     div.textContent = str;
@@ -170,3 +225,5 @@ window.addEventListener('message', (event: MessageEvent) => {
 
 // Signal ready
 vscode.postMessage({ type: 'ready' });
+
+export {};

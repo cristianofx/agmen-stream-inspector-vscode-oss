@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Advanced filters now combine with the basic field filter using AND semantics.
+
 ## [1.2.0] - 2026-08-19
 
 ### Changed

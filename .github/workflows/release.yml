@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Verify
+        run: |
+          npm run lint
+          npm run typecheck
+          npm run typecheck:webview
+          npm run test:unit
+          npm run build
+          npm audit --omit=dev
+
+      - name: Package VSIX
+        run: npm run package
+
+      - name: Generate SBOM
+        run: npm sbom --omit=dev --sbom-format cyclonedx --package-lock-only > agmen-stream-inspector.sbom.cdx.json
+
+      - name: Generate checksums
+        run: sha256sum *.vsix agmen-stream-inspector.sbom.cdx.json > SHA256SUMS.txt
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            *.vsix
+            agmen-stream-inspector.sbom.cdx.json
+            SHA256SUMS.txt

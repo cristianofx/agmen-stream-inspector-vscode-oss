@@ -2,8 +2,8 @@
   "compilerOptions": {
     "module": "ES2022",
     "target": "ES2022",
-    "outDir": "dist/webview",
-    "rootDir": "src/webview",
+    "outDir": "dist/.webview-typecheck",
+    "rootDir": "src",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "sourceMap": true,
     "strict": true,
@@ -12,5 +12,10 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/webview/**/*.ts"]
+  "include": [
+    "src/webview/**/*.ts",
+    "src/core/models/**/*.ts",
+    "src/core/services/redisUrlValidator.ts",
+    "src/core/services/redisEndpoint.ts"
+  ]
 }

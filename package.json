@@ -29,6 +29,12 @@
   ],
   "activationEvents": [],
   "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Agmen Stream Inspector opens Redis and SSH connections and can replay messages, so it is disabled in untrusted workspaces."
+    }
+  },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -88,23 +94,37 @@
           "minimum": 50,
           "maximum": 5000,
           "description": "Watch mode polling interval in milliseconds"
+        },
+        "redisInspector.resultRetentionMaxResults": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 100,
+          "maximum": 10000,
+          "description": "Maximum number of Find and Watch results retained in memory and rendered in the webview"
         }
       }
     }
   },
   "scripts": {
     "vscode:prepublish": "npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:webview": "tsc -p tsconfig.webview.json --noEmit",
     "build": "node esbuild.js --production",
     "watch": "node esbuild.js --watch",
     "lint": "eslint src --ext ts",
-    "test": "mocha",
-    "test:vscode": "node ./dist/test/runTest.js",
-    "compile-tests": "tsc -p tsconfig.test.json",
+    "test": "npm run test:unit",
+    "test:unit": "npm run compile-tests && mocha --no-config \"dist/test/suite/core/**/*.test.js\"",
+    "test:vscode": "npm run build && npm run compile-tests && node ./dist/test/runTest.js",
+    "compile-tests": "node -e \"require('fs').rmSync('dist/test',{recursive:true,force:true})\" && tsc -p tsconfig.test.json",
     "package": "vsce package"
   },
   "dependencies": {
     "ioredis": "^5.4.2",
     "ssh2": "^1.16.0"
+  },
+  "overrides": {
+    "diff": "^8.0.3",
+    "serialize-javascript": "^7.0.5"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -115,7 +135,7 @@
     "@vscode/vsce": "^3.2.0",
     "esbuild": "^0.28.2",
     "eslint": "^9.17.0",
-    "mocha": "^11.1.0",
+    "mocha": "^11.8.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.67.0"

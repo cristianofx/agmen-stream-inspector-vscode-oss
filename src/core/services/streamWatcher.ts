@@ -13,6 +13,7 @@ export class StreamWatcher {
         private readonly _redis: Redis,
         private readonly _opts: SearchOptions,
         private readonly _pollIntervalMs: number = 100,
+        private readonly _onRecoverableError?: (error: Error, stream: string, phase: 'initialize' | 'poll') => void,
     ) {}
 
     async *watchAsync(signal?: AbortSignal): AsyncGenerator<SearchHit> {
@@ -30,9 +31,15 @@ export class StreamWatcher {
                     lastIds.set(stream, String(info[lastGenIdx + 1]));
                 } else {
                     lastIds.set(stream, '0-0');
+                    this._reportRecoverableError(
+                        new Error(`Could not determine the latest entry id for stream '${stream}'.`),
+                        stream,
+                        'initialize',
+                    );
                 }
-            } catch {
+            } catch (error) {
                 lastIds.set(stream, '0-0');
+                this._reportRecoverableError(toError(error), stream, 'initialize');
             }
         }
 
@@ -60,18 +67,25 @@ export class StreamWatcher {
                             }
                         }
                     }
-                } catch {
-                    // Skip errors during poll (connection might be recovering)
+                } catch (error) {
+                    this._reportRecoverableError(toError(error), stream, 'poll');
                 }
             }
 
             // Wait before next poll
             if (signal?.aborted) { return; }
             await new Promise<void>((resolve) => {
-                const timer = setTimeout(resolve, this._pollIntervalMs);
+                let onAbort = (): void => undefined;
+                const timer = setTimeout(() => {
+                    if (signal) {
+                        signal.removeEventListener('abort', onAbort);
+                    }
+                    resolve();
+                }, this._pollIntervalMs);
                 if (signal) {
-                    const onAbort = () => {
+                    onAbort = () => {
                         clearTimeout(timer);
+                        signal.removeEventListener('abort', onAbort);
                         resolve();
                     };
                     signal.addEventListener('abort', onAbort, { once: true });
@@ -79,4 +93,16 @@ export class StreamWatcher {
             });
         }
     }
+
+    private _reportRecoverableError(error: Error, stream: string, phase: 'initialize' | 'poll'): void {
+        try {
+            this._onRecoverableError?.(error, stream, phase);
+        } catch {
+            // Reporting a transient watch error must not stop the watch loop.
+        }
+    }
+}
+
+function toError(error: unknown): Error {
+    return error instanceof Error ? error : new Error(String(error));
 }

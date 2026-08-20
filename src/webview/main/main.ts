@@ -1,9 +1,17 @@
+import { ConditionalFilterGroup } from '../../core/models/conditionalFilterGroup';
+import { FilterCondition } from '../../core/models/filterCondition';
+import { FilterOperator } from '../../core/models/filterOperator';
+import { LogicalOperator } from '../../core/models/logicalOperator';
+import { trimRenderedResultWindow } from './resultListWindow';
+
 // Acquire the VS Code API
 const vscode = acquireVsCodeApi();
 
 // --- State ---
 let selectedResultIndex = -1;
 let resultCount = 0;
+let maxRenderedResults = 1000;
+let lastFocusedElement: HTMLElement | null = null;
 
 // --- DOM References ---
 const connectionSelect = document.getElementById('connectionSelect') as HTMLSelectElement;
@@ -43,6 +51,7 @@ bindClick('btnFetchStreams', () => {
 });
 bindClick('btnSelectAll', () => selectAllStreams(true));
 bindClick('btnDeselectAll', () => selectAllStreams(false));
+bindClick('btnResetFilters', resetFilters);
 
 bindClick('btnSearch', () => sendSearchCommand('startSearch'));
 bindClick('btnWatch', () => sendSearchCommand('startWatch'));
@@ -84,6 +93,9 @@ document.addEventListener('keydown', (e) => {
     }
     if (e.key === 'Escape' && findBar.style.display !== 'none') {
         findBar.style.display = 'none';
+    }
+    if (e.key === 'Escape' && filterHelpModal.style.display !== 'none') {
+        closeHelpModal();
     }
 });
 
@@ -127,6 +139,13 @@ findInput.addEventListener('keydown', (e) => {
             document.body.style.userSelect = '';
         }
     });
+
+    splitter.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') { return; }
+        const delta = e.key === 'ArrowUp' ? -24 : 24;
+        setResultsPanelHeight(resultsPanel.getBoundingClientRect().height + delta);
+        e.preventDefault();
+    });
 })();
 
 // --- Stream filter ---
@@ -156,6 +175,32 @@ function getSelectedStreams(): string[] {
     return streams;
 }
 
+function resetFilters() {
+    const findField = document.getElementById('findField') as HTMLInputElement | null;
+    const findEq = document.getElementById('findEq') as HTMLInputElement | null;
+    const jsonField = document.getElementById('jsonField') as HTMLInputElement | null;
+    const rootOperator = document.getElementById('rootOperator') as HTMLSelectElement | null;
+    const conditionsList = document.getElementById('conditionsList');
+    const nestedGroupsList = document.getElementById('nestedGroupsList');
+
+    streamFilter.value = '';
+    streamFilter.dispatchEvent(new Event('input'));
+    if (findField) { findField.value = ''; }
+    if (findEq) { findEq.value = ''; }
+    if (jsonField) { jsonField.value = 'message'; }
+    if (rootOperator) { rootOperator.value = 'And'; }
+    if (conditionsList) { conditionsList.innerHTML = ''; }
+    if (nestedGroupsList) { nestedGroupsList.innerHTML = ''; }
+    conditionIdCounter = 0;
+    groupIdCounter = 0;
+    if (useAdvancedFiltersCheckbox) {
+        useAdvancedFiltersCheckbox.checked = false;
+    }
+    if (advancedFiltersSection) {
+        advancedFiltersSection.style.display = 'none';
+    }
+}
+
 // --- Conditional Filter Functions ---
 
 let conditionIdCounter = 0;
@@ -180,18 +225,20 @@ const filterHelpCloseBtn = document.getElementById('filterHelpCloseBtn') as HTML
 
 if (filterHelpBtn && filterHelpModal) {
     filterHelpBtn.addEventListener('click', () => {
+        lastFocusedElement = document.activeElement as HTMLElement | null;
         filterHelpModal.style.display = 'flex';
+        filterHelpCloseBtn.focus();
     });
 }
 if (filterHelpCloseBtn && filterHelpModal) {
     filterHelpCloseBtn.addEventListener('click', () => {
-        filterHelpModal.style.display = 'none';
+        closeHelpModal();
     });
 }
 if (filterHelpModal) {
     filterHelpModal.addEventListener('click', (e) => {
         if (e.target === filterHelpModal) {
-            filterHelpModal.style.display = 'none';
+            closeHelpModal();
         }
     });
 }
@@ -277,7 +324,7 @@ function addNestedGroup() {
 }
 
 // Build conditional filter from form
-function buildConditionalFilter(): any | undefined {
+function buildConditionalFilter(): ConditionalFilterGroup | undefined {
     const useAdvanced = useAdvancedFiltersCheckbox?.checked;
     if (!useAdvanced) { return undefined; }
 
@@ -292,18 +339,18 @@ function buildConditionalFilter(): any | undefined {
     }
 
     return {
-        operator: rootOperator,
+        operator: rootOperator as LogicalOperator,
         conditions,
         nestedGroups
     };
 }
 
 // Collect conditions from a container
-function collectConditions(containerId: string): Array<{ fieldName: string; operator: string; value: string }> {
+function collectConditions(containerId: string): FilterCondition[] {
     const container = document.getElementById(containerId);
     if (!container) { return []; }
 
-    const conditions: Array<{ fieldName: string; operator: string; value: string }> = [];
+    const conditions: FilterCondition[] = [];
     const conditionRows = container.querySelectorAll('.condition-row');
 
     conditionRows.forEach(row => {
@@ -316,7 +363,7 @@ function collectConditions(containerId: string): Array<{ fieldName: string; oper
             if (fieldName) {
                 conditions.push({
                     fieldName,
-                    operator: operatorSelect.value,
+                    operator: operatorSelect.value as FilterOperator,
                     value: valueInput?.value || ''
                 });
             }
@@ -327,11 +374,11 @@ function collectConditions(containerId: string): Array<{ fieldName: string; oper
 }
 
 // Collect nested groups
-function collectNestedGroups(): Array<{ operator: string; conditions: any[] }> {
+function collectNestedGroups(): ConditionalFilterGroup[] {
     const container = document.getElementById('nestedGroupsList');
     if (!container) { return []; }
 
-    const groups: Array<{ operator: string; conditions: any[] }> = [];
+    const groups: ConditionalFilterGroup[] = [];
     const groupDivs = container.querySelectorAll('.nested-group');
 
     groupDivs.forEach(groupDiv => {
@@ -341,7 +388,7 @@ function collectNestedGroups(): Array<{ operator: string; conditions: any[] }> {
 
         if (conditions.length > 0) {
             groups.push({
-                operator: operatorSelect?.value || 'And',
+                operator: (operatorSelect?.value || 'And') as LogicalOperator,
                 conditions
             });
         }
@@ -374,6 +421,13 @@ function sendSearchCommand(type: 'startSearch' | 'startWatch') {
 
     const useAdvancedFilters = useAdvancedFiltersCheckbox?.checked || false;
     const conditionalFilter = buildConditionalFilter();
+
+    // A new Find or Watch starts a new result set. Clear the previous set
+    // immediately, while leaving it intact when an active operation is
+    // canceled so the user can continue inspecting those messages.
+    if (streams.length > 0) {
+        clearResults();
+    }
 
     vscode.postMessage({
         type,
@@ -423,36 +477,48 @@ function renderProfiles(profiles: Array<{ id: string; name: string; environment:
 
 function renderStreams(streams: string[]) {
     streamList.innerHTML = '';
-    for (const name of streams) {
+    streams.forEach((name, index) => {
         const div = document.createElement('div');
         div.className = 'stream-item';
         div.setAttribute('data-name', name);
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
+        checkbox.id = `stream-${index}`;
         checkbox.setAttribute('data-stream', name);
         checkbox.checked = false;
-        const label = document.createElement('span');
+        const label = document.createElement('label');
+        label.htmlFor = checkbox.id;
         label.textContent = name;
         div.appendChild(checkbox);
         div.appendChild(label);
         streamList.appendChild(div);
-    }
+    });
 }
 
 function addResult(hit: { stream: string; id: string; idDateTimeFormatted?: string; rawMessage?: string }) {
-    const div = document.createElement('div');
+    const div = document.createElement('button');
+    div.type = 'button';
     div.className = 'result-item';
-    const idx = resultCount++;
-    div.setAttribute('data-index', String(idx));
+    resultCount++;
+    div.setAttribute('role', 'option');
     div.innerHTML = `<span class="result-stream">${escapeHtml(hit.stream)}</span>
         <span class="result-id">${escapeHtml(hit.idDateTimeFormatted ?? hit.id)}</span>`;
-    div.addEventListener('click', () => {
-        resultsList.querySelector('.result-item.selected')?.classList.remove('selected');
-        div.classList.add('selected');
-        selectedResultIndex = idx;
-        vscode.postMessage({ type: 'selectResult', payload: { index: idx } });
+    div.addEventListener('click', () => selectRenderedResult(div));
+    div.addEventListener('keydown', (event: KeyboardEvent) => {
+        if (event.key === 'ArrowDown') {
+            (div.nextElementSibling as HTMLElement | null)?.focus();
+            event.preventDefault();
+        } else if (event.key === 'ArrowUp') {
+            (div.previousElementSibling as HTMLElement | null)?.focus();
+            event.preventDefault();
+        } else if (event.key === 'Enter' || event.key === ' ') {
+            selectRenderedResult(div);
+            event.preventDefault();
+        }
     });
     resultsList.appendChild(div);
+    trimRenderedResultWindow(resultsList, maxRenderedResults);
+    syncRenderedResultIndices();
     summaryText.textContent = `${resultCount} results`;
 }
 
@@ -478,11 +544,31 @@ function escapeHtml(str: string): string {
     return div.innerHTML;
 }
 
+function selectRenderedResult(element: HTMLElement) {
+    const index = parseInt(element.getAttribute('data-index') || '-1', 10);
+    if (index < 0) { return; }
+    resultsList.querySelector('.result-item.selected')?.classList.remove('selected');
+    element.classList.add('selected');
+    selectedResultIndex = index;
+    vscode.postMessage({ type: 'selectResult', payload: { index } });
+}
+
+function syncRenderedResultIndices() {
+    const items = Array.from(resultsList.querySelectorAll<HTMLElement>('.result-item'));
+    items.forEach((item, index) => {
+        item.setAttribute('data-index', String(index));
+    });
+    if (selectedResultIndex >= items.length) {
+        selectedResultIndex = -1;
+    }
+}
+
 // --- Message handler from extension host ---
 window.addEventListener('message', (event) => {
     const msg = event.data;
     switch (msg.type) {
         case 'stateUpdate':
+            maxRenderedResults = Math.max(1, msg.payload.resultRetentionLimit ?? 1000);
             renderProfiles(msg.payload.profiles);
             clearResults();
             for (const hit of msg.payload.results) {
@@ -516,7 +602,6 @@ window.addEventListener('message', (event) => {
             statusText.textContent = msg.payload.status;
             statusText.className = `status-text status-${msg.payload.statusType}`;
             if (msg.payload.statusType === 'searching' || msg.payload.statusType === 'watching') {
-                clearResults();
                 setSearchButtons(true);
             } else if (msg.payload.statusType === 'connecting') {
                 setSearchButtons(true);
@@ -559,3 +644,18 @@ interface WindowWithFind extends Window {
         showDialog?: boolean
     ): boolean;
 }
+
+function closeHelpModal() {
+    filterHelpModal.style.display = 'none';
+    lastFocusedElement?.focus();
+}
+
+function setResultsPanelHeight(newHeight: number) {
+    const containerHeight = resultsPanel.parentElement!.getBoundingClientRect().height - splitter.offsetHeight;
+    const clampedHeight = Math.min(Math.max(60, newHeight), containerHeight - 60);
+    resultsPanel.style.flex = 'none';
+    resultsPanel.style.height = `${clampedHeight}px`;
+    viewerPanel.style.flex = '1';
+}
+
+export {};
