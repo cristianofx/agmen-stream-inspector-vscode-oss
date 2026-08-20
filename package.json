@@ -119,7 +119,7 @@
     "package": "vsce package"
   },
   "dependencies": {
-    "ioredis": "^5.4.2",
+    "ioredis": "^6.0.0",
     "ssh2": "^1.16.0"
   },
   "overrides": {
