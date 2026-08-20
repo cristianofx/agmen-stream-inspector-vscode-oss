@@ -37,7 +37,7 @@ account, activation key, subscription, or external entitlement service.
 - Multiple connection profiles with Dev, Test, and Prod labels
 - Color-coded environments
 - SSH tunnels with password or private-key authentication
-- Explicit SSH host-key fingerprint verification (`SHA256:...`) for fail-closed tunneling
+- SSH trust-on-first-use confirmation with persisted `SHA256:...` host fingerprints and mismatch blocking
 - Redis and SSH passwords stored through VS Code SecretStorage
 - Connection testing before save
 - Keyboard-accessible profile reordering
@@ -71,9 +71,9 @@ account, activation key, subscription, or external entitlement service.
 1. Select **+ Add** in the Connection section.
 2. Enter a name and Redis URL, such as `redis://localhost:6379`.
 3. Optionally configure authentication or an SSH tunnel.
-4. If you use SSH, provide the bastion host fingerprint in `SHA256:...` form.
-4. Test and save the connection.
-5. Fetch the available streams, select one or more, configure the search, and select **Find** or **Watch**.
+4. If you use SSH, test the tunnel. On first use the extension will show the bastion fingerprint and ask whether to trust and save it.
+5. Save the connection.
+6. Fetch the available streams, select one or more, configure the search, and select **Find** or **Watch**.
 
 ## Commands
 
@@ -105,10 +105,11 @@ The default Redis port is `6379`. Use `rediss://` for TLS-encrypted connections.
 For simple endpoints, use `host`, `host:port`, `[ipv6]`, or `[ipv6]:port`. Ambiguous forms such as `host:6379:6380` are rejected.
 
 For a server accessible only through SSH, enable **SSH Tunnel** in the connection
-editor, enter the bastion details, choose password or private-key
-authentication, and provide the bastion host fingerprint in `SHA256:...` form.
-The extension creates a local tunnel for the Redis connection only after the
-fingerprint matches exactly.
+editor, enter the bastion details, and choose password or private-key
+authentication. On first use the extension shows the presented bastion host
+fingerprint, asks whether to trust it, and saves the accepted `SHA256:...`
+fingerprint to the profile. Future connections fail closed if the fingerprint
+changes.
 
 ## Workspace trust
 
@@ -144,6 +145,9 @@ installable extension package, run:
 ```bash
 npm run package
 ```
+
+Tagged releases also generate a CycloneDX SBOM and `SHA256SUMS.txt` through
+`.github/workflows/release.yml`.
 
 ### Project structure
 
