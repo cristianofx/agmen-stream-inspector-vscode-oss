@@ -130,7 +130,7 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.17.0",
     "@types/ssh2": "^1.15.1",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.125.0",
     "@vscode/test-electron": "^2.4.1",
     "@vscode/vsce": "^3.2.0",
     "esbuild": "^0.28.2",
