@@ -7,7 +7,7 @@ import type { ConditionalFilterGroup } from '../../core/models/conditionalFilter
 export type StatusType = 'info' | 'searching' | 'connecting' | 'done' | 'noMatches' | 'error' | 'canceled' | 'watching';
 
 export type ExtensionToWebview =
-    | { type: 'stateUpdate'; payload: { results: SearchHit[]; profiles: ConnectionProfile[] } }
+    | { type: 'stateUpdate'; payload: { results: SearchHit[]; profiles: ConnectionProfile[]; resultRetentionLimit?: number } }
     | { type: 'searchResult'; payload: SearchHit }
     | { type: 'searchComplete'; payload: { count: number; elapsedMs: number } }
     | { type: 'statusUpdate'; payload: { status: string; statusType: StatusType } }

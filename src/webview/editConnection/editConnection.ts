@@ -123,6 +123,7 @@ btnTestConnection.addEventListener('click', () => {
     vscode.postMessage({
         type: 'testConnection',
         payload: {
+            id: profileId,
             redisUrl: redisUrlInput.value.trim(),
             redisUser: redisUserInput.value.trim(),
             redisPass: redisPassInput.value,
@@ -189,6 +190,9 @@ window.addEventListener('message', (event: MessageEvent) => {
         }
         case 'sshKeySelected':
             sshKeyPathInput.value = msg.payload.path || '';
+            break;
+        case 'sshFingerprintLearned':
+            sshHostKeyFingerprintInput.value = msg.payload.fingerprint || '';
             break;
     }
 });

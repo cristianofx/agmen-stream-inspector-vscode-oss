@@ -27,6 +27,7 @@ class FakeDiscoveryRedis {
         private readonly _keys: string[],
         private readonly _supportsScanType: boolean,
         private readonly _types: Record<string, string>,
+        private readonly _scanError?: Error,
     ) {}
 
     async scan(
@@ -34,6 +35,9 @@ class FakeDiscoveryRedis {
         ...args: string[]
     ): Promise<[string, string[]]> {
         this.scanCalls.push(args);
+        if (this._scanError) {
+            throw this._scanError;
+        }
         if (args.includes('TYPE') && !this._supportsScanType) {
             throw new Error('ERR syntax error');
         }
@@ -89,5 +93,23 @@ describe('stream discovery', () => {
 
         assert.deepStrictEqual(result, ['a', 'c']);
         assert.strictEqual(redis.pipelineCounter.execCalls, 1);
+    });
+
+    it('surfaces Redis scan errors instead of treating them as fallback support checks', async () => {
+        const redis = new FakeDiscoveryRedis(
+            ['a'],
+            true,
+            { a: 'stream' },
+            new Error('Connection is closed.'),
+        );
+
+        await assert.rejects(
+            async () => discoverStreamsAsync(redis as never, '*'),
+            /Connection is closed\./,
+        );
+        await assert.rejects(
+            async () => resolveStreamsAsync(redis as never, ['*']),
+            /Connection is closed\./,
+        );
     });
 });

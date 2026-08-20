@@ -39,8 +39,11 @@ async function supportsScanType(redis: Redis): Promise<boolean> {
     try {
         await redis.scan('0', 'MATCH', '__redisInspectorNeverMatches__', 'COUNT', '1', 'TYPE', 'stream');
         return true;
-    } catch {
-        return false;
+    } catch (error) {
+        if (isUnsupportedScanTypeError(error)) {
+            return false;
+        }
+        throw error;
     }
 }
 
@@ -52,10 +55,15 @@ async function filterStreamKeys(redis: Redis, keys: string[]): Promise<string[]>
 
     const results = await pipeline.exec();
     if (!results) {
-        return [];
+        throw new Error('Redis pipeline returned no results while discovering streams.');
     }
     return results
         .map((result, index) => ({ result, key: keys[index] }))
         .filter(({ result }) => result[0] == null && result[1] === 'stream')
         .map(({ key }) => key);
+}
+
+function isUnsupportedScanTypeError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /syntax/i.test(message) || /wrong number of arguments/i.test(message);
 }

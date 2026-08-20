@@ -1,10 +1,16 @@
+import { ConditionalFilterGroup } from '../../core/models/conditionalFilterGroup';
+import { FilterCondition } from '../../core/models/filterCondition';
+import { FilterOperator } from '../../core/models/filterOperator';
+import { LogicalOperator } from '../../core/models/logicalOperator';
+import { trimRenderedResultWindow } from './resultListWindow';
+
 // Acquire the VS Code API
 const vscode = acquireVsCodeApi();
 
 // --- State ---
 let selectedResultIndex = -1;
 let resultCount = 0;
-const MAX_RENDERED_RESULTS = 1000;
+let maxRenderedResults = 1000;
 let lastFocusedElement: HTMLElement | null = null;
 
 // --- DOM References ---
@@ -291,7 +297,7 @@ function addNestedGroup() {
 }
 
 // Build conditional filter from form
-function buildConditionalFilter(): any | undefined {
+function buildConditionalFilter(): ConditionalFilterGroup | undefined {
     const useAdvanced = useAdvancedFiltersCheckbox?.checked;
     if (!useAdvanced) { return undefined; }
 
@@ -306,18 +312,18 @@ function buildConditionalFilter(): any | undefined {
     }
 
     return {
-        operator: rootOperator,
+        operator: rootOperator as LogicalOperator,
         conditions,
         nestedGroups
     };
 }
 
 // Collect conditions from a container
-function collectConditions(containerId: string): Array<{ fieldName: string; operator: string; value: string }> {
+function collectConditions(containerId: string): FilterCondition[] {
     const container = document.getElementById(containerId);
     if (!container) { return []; }
 
-    const conditions: Array<{ fieldName: string; operator: string; value: string }> = [];
+    const conditions: FilterCondition[] = [];
     const conditionRows = container.querySelectorAll('.condition-row');
 
     conditionRows.forEach(row => {
@@ -330,7 +336,7 @@ function collectConditions(containerId: string): Array<{ fieldName: string; oper
             if (fieldName) {
                 conditions.push({
                     fieldName,
-                    operator: operatorSelect.value,
+                    operator: operatorSelect.value as FilterOperator,
                     value: valueInput?.value || ''
                 });
             }
@@ -341,11 +347,11 @@ function collectConditions(containerId: string): Array<{ fieldName: string; oper
 }
 
 // Collect nested groups
-function collectNestedGroups(): Array<{ operator: string; conditions: any[] }> {
+function collectNestedGroups(): ConditionalFilterGroup[] {
     const container = document.getElementById('nestedGroupsList');
     if (!container) { return []; }
 
-    const groups: Array<{ operator: string; conditions: any[] }> = [];
+    const groups: ConditionalFilterGroup[] = [];
     const groupDivs = container.querySelectorAll('.nested-group');
 
     groupDivs.forEach(groupDiv => {
@@ -355,7 +361,7 @@ function collectNestedGroups(): Array<{ operator: string; conditions: any[] }> {
 
         if (conditions.length > 0) {
             groups.push({
-                operator: operatorSelect?.value || 'And',
+                operator: (operatorSelect?.value || 'And') as LogicalOperator,
                 conditions
             });
         }
@@ -477,9 +483,7 @@ function addResult(hit: { stream: string; id: string; idDateTimeFormatted?: stri
         }
     });
     resultsList.appendChild(div);
-    while (resultsList.children.length > MAX_RENDERED_RESULTS) {
-        resultsList.firstElementChild?.remove();
-    }
+    trimRenderedResultWindow(resultsList, maxRenderedResults);
     syncRenderedResultIndices();
     summaryText.textContent = `${resultCount} results`;
 }
@@ -530,6 +534,7 @@ window.addEventListener('message', (event) => {
     const msg = event.data;
     switch (msg.type) {
         case 'stateUpdate':
+            maxRenderedResults = Math.max(1, msg.payload.resultRetentionLimit ?? 1000);
             renderProfiles(msg.payload.profiles);
             clearResults();
             for (const hit of msg.payload.results) {

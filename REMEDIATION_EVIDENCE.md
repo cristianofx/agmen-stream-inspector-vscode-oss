@@ -8,7 +8,7 @@ This file records verification performed in the `fix/audit-remediation` worktree
 - `npm run lint` — passed.
 - `npm run typecheck` — passed.
 - `npm run typecheck:webview` — passed.
-- `npm test` — passed; 114 passing tests reported by the current unit command.
+- `npm test` — passed; 64 unit tests passed with the duplicate source/compiled execution removed.
 - `xvfb-run -a npm run test:vscode` — passed; 1 VS Code smoke test passed and the extension host exited with code 0.
 - `npm run build` — passed.
 - `npm run package` — passed; generated `agmen-stream-inspector-1.2.0.vsix`.

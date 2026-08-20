@@ -65,9 +65,9 @@ export class StreamWatcher {
             // Wait before next poll
             if (signal?.aborted) { return; }
             await new Promise<void>((resolve) => {
-                let onAbort: (() => void) | undefined;
+                let onAbort = (): void => undefined;
                 const timer = setTimeout(() => {
-                    if (signal && onAbort) {
+                    if (signal) {
                         signal.removeEventListener('abort', onAbort);
                     }
                     resolve();

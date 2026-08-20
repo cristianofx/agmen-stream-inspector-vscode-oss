@@ -28,6 +28,49 @@ describe('webview message validation', () => {
         assert.strictEqual(result.ok, true);
     });
 
+    it('rejects replay payloads with negative or non-integer indices', () => {
+        const result = validateMainPanelMessage({
+            type: 'replay',
+            payload: { hitIndices: [0, -1, 1.5] },
+        });
+        assert.strictEqual(result.ok, false);
+    });
+
+    it('rejects conditional filters that exceed nesting limits', () => {
+        const result = validateMainPanelMessage({
+            type: 'startWatch',
+            payload: {
+                streams: ['orders'],
+                findField: '',
+                findEq: '',
+                jsonField: 'message',
+                newestFirst: false,
+                caseInsensitive: false,
+                conditionalFilter: {
+                    operator: 'And',
+                    conditions: [],
+                    nestedGroups: [{
+                        operator: 'And',
+                        conditions: [],
+                        nestedGroups: [{
+                            operator: 'And',
+                            conditions: [],
+                            nestedGroups: [{
+                                operator: 'And',
+                                conditions: [],
+                                nestedGroups: [{
+                                    operator: 'And',
+                                    conditions: [],
+                                }],
+                            }],
+                        }],
+                    }],
+                },
+            },
+        });
+        assert.strictEqual(result.ok, false);
+    });
+
     it('rejects edit-connection test payloads with invalid SSH port', () => {
         const result = validateEditConnectionMessage({
             type: 'testConnection',
@@ -42,6 +85,22 @@ describe('webview message validation', () => {
                 sshKeyPath: '',
                 sshKeyPassphrase: '',
                 sshHostKeyFingerprint: '',
+            },
+        });
+        assert.strictEqual(result.ok, false);
+    });
+
+    it('rejects SSH passphrases when no private key path is provided', () => {
+        const result = validateEditConnectionMessage({
+            type: 'save',
+            payload: {
+                redisUrl: 'redis://localhost:6379',
+                sshHost: 'host',
+                sshPort: 22,
+                sshUser: 'user',
+                sshPass: '',
+                sshKeyPath: '',
+                sshKeyPassphrase: 'secret',
             },
         });
         assert.strictEqual(result.ok, false);

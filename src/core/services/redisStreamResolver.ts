@@ -19,7 +19,8 @@ export async function resolveStreamsAsync(
     signal?: AbortSignal,
 ): Promise<string[]> {
     const keys = new Set<string>();
-    const useScanType = await supportsScanType(redis);
+    const hasPatternInput = inputs.some(isPattern);
+    const useScanType = hasPatternInput ? await supportsScanType(redis) : false;
 
     for (const item of inputs) {
         if (signal?.aborted) { break; }
@@ -54,20 +55,19 @@ export async function resolveStreamsAsync(
 }
 
 async function isStreamAsync(redis: Redis, key: string): Promise<boolean> {
-    try {
-        const type = await redis.type(key);
-        return type === 'stream';
-    } catch {
-        return false;
-    }
+    const type = await redis.type(key);
+    return type === 'stream';
 }
 
 async function supportsScanType(redis: Redis): Promise<boolean> {
     try {
         await redis.scan('0', 'MATCH', '__redisInspectorNeverMatches__', 'COUNT', '1', 'TYPE', 'stream');
         return true;
-    } catch {
-        return false;
+    } catch (error) {
+        if (isUnsupportedScanTypeError(error)) {
+            return false;
+        }
+        throw error;
     }
 }
 
@@ -83,10 +83,15 @@ async function filterStreamKeys(redis: Redis, keys: string[]): Promise<string[]>
 
     const results = await pipeline.exec();
     if (!results) {
-        return [];
+        throw new Error('Redis pipeline returned no results while resolving streams.');
     }
     return results
         .map((result, index) => ({ result, key: keys[index] }))
         .filter(({ result }) => result[0] == null && result[1] === 'stream')
         .map(({ key }) => key);
+}
+
+function isUnsupportedScanTypeError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /syntax/i.test(message) || /wrong number of arguments/i.test(message);
 }

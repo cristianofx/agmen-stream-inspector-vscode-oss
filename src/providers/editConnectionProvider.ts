@@ -6,6 +6,7 @@ import { buildRedisOptions } from '../core/services/redisConnectionBuilder';
 import { SshTunnel } from '../core/services/sshTunnel';
 import { parseRedisEndpoint } from '../core/services/redisEndpoint';
 import { validateEditConnectionMessage } from '../core/security/webviewMessageValidator';
+import { verifySshHostKey } from '../core/services/sshHostKeyVerifier';
 
 /**
  * Manages the Edit Connection webview panel.
@@ -125,6 +126,7 @@ export class EditConnectionProvider {
     }
 
     private async _testConnection(payload: {
+        id?: string;
         redisUrl: string;
         redisUser: string;
         redisPass: string;
@@ -153,6 +155,38 @@ export class EditConnectionProvider {
                     sshKeyPath: payload.sshKeyPath || undefined,
                     sshKeyPassphrase: payload.sshKeyPassphrase || undefined,
                     sshHostKeyFingerprint: payload.sshHostKeyFingerprint || undefined,
+                    hostKeyVerifier: async ({ host, port, fingerprint, configuredFingerprint }) => {
+                        const decision = await verifySshHostKey({
+                            profileId: payload.id || 'unsaved-profile',
+                            host,
+                            port,
+                            fingerprint,
+                            getStoredFingerprint: async () => configuredFingerprint,
+                            persistFingerprint: async (_profileId, acceptedFingerprint) => {
+                                this._panel?.webview.postMessage({
+                                    type: 'sshFingerprintLearned',
+                                    payload: { fingerprint: acceptedFingerprint },
+                                });
+                            },
+                            confirmFingerprint: async ({ fingerprint: candidateFingerprint }) => {
+                                const choice = await vscode.window.showWarningMessage(
+                                    `Trust SSH host ${host}:${port} with fingerprint ${candidateFingerprint}? This fingerprint will be saved to the connection profile.`,
+                                    { modal: true },
+                                    'Trust',
+                                    'Cancel',
+                                );
+                                return choice === 'Trust';
+                            },
+                        });
+
+                        return {
+                            accepted: decision.accepted,
+                            trustedFingerprint: fingerprint,
+                            errorMessage: decision.reason === 'mismatch'
+                                ? `SSH host key mismatch for ${host}:${port}.`
+                                : 'SSH host fingerprint was not trusted.',
+                        };
+                    },
                     remoteHost: endpoint.host,
                     remotePort: endpoint.port,
                 });

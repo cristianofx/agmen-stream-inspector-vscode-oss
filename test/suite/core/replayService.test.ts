@@ -125,7 +125,7 @@ describe('ReplayService', () => {
         const state: FakeReplayRedisState = {
             batchPlans: [
                 [[null, '1-0'], [null, '2-0']],
-                [new Error('socket closed')] as never,
+                new Error('socket closed'),
             ],
             executedBatches: [],
         };

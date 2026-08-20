@@ -113,7 +113,7 @@
     "watch": "node esbuild.js --watch",
     "lint": "eslint src --ext ts",
     "test": "npm run test:unit",
-    "test:unit": "npm run compile-tests && mocha \"dist/test/suite/core/**/*.test.js\"",
+    "test:unit": "npm run compile-tests && mocha --no-config \"dist/test/suite/core/**/*.test.js\"",
     "test:vscode": "npm run build && npm run compile-tests && node ./dist/test/runTest.js",
     "compile-tests": "node -e \"require('fs').rmSync('dist/test',{recursive:true,force:true})\" && tsc -p tsconfig.test.json",
     "package": "vsce package"

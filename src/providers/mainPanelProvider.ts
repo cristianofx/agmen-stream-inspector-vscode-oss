@@ -17,6 +17,9 @@ import { WebviewToExtension, ExtensionToWebview, SearchOptionsDto } from '../web
 import { EditConnectionProvider } from './editConnectionProvider';
 import { ReplayDialogProvider } from './replayDialogProvider';
 import { ManageProfilesProvider } from './manageProfilesProvider';
+import { ReplayExecutionError, ReplayService } from '../core/services/replayService';
+import { verifySshHostKey } from '../core/services/sshHostKeyVerifier';
+import { getEnvironmentName } from '../core/models/profileEnvironment';
 
 export class MainPanelProvider implements vscode.Disposable {
     private _panel: vscode.WebviewPanel | undefined;
@@ -31,6 +34,8 @@ export class MainPanelProvider implements vscode.Disposable {
     private _editConnectionProvider: EditConnectionProvider;
     private _replayDialogProvider: ReplayDialogProvider;
     private _manageProfilesProvider: ManageProfilesProvider;
+    private _resultRetentionLimit = 1000;
+    private readonly _replayService = new ReplayService();
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -160,7 +165,11 @@ export class MainPanelProvider implements vscode.Disposable {
                 await this._onWebviewReady();
                 break;
             case 'selectConnection':
-                this._selectedProfileId = msg.payload.profileId;
+                if (this._isKnownProfileId(msg.payload.profileId)) {
+                    this._selectedProfileId = msg.payload.profileId;
+                } else {
+                    this._sendToWebview({ type: 'error', payload: { message: 'Unknown connection profile.' } });
+                }
                 break;
             case 'fetchStreams':
                 await this._fetchStreams(msg.payload.profileId);
@@ -202,7 +211,11 @@ export class MainPanelProvider implements vscode.Disposable {
                 await this._replay(this._results.map((_, i) => i));
                 break;
             case 'selectResult':
-                this._onSelectResult(msg.payload.index);
+                if (msg.payload.index < this._results.length) {
+                    this._onSelectResult(msg.payload.index);
+                } else {
+                    this._sendToWebview({ type: 'error', payload: { message: 'Selected result is no longer available.' } });
+                }
                 break;
         }
     }
@@ -260,7 +273,16 @@ export class MainPanelProvider implements vscode.Disposable {
 
         this._abortController = new AbortController();
         const signal = this._abortController.signal;
+        this._resultRetentionLimit = Number.MAX_SAFE_INTEGER;
         this._results = [];
+        this._sendToWebview({
+            type: 'stateUpdate',
+            payload: {
+                results: this._results,
+                profiles: this._profiles,
+                resultRetentionLimit: this._resultRetentionLimit,
+            },
+        });
 
         this._sendToWebview({ type: 'statusUpdate', payload: { status: 'Connecting...', statusType: 'connecting' } });
 
@@ -348,6 +370,15 @@ export class MainPanelProvider implements vscode.Disposable {
 
             const pollInterval = vscode.workspace.getConfiguration('redisInspector').get<number>('pollIntervalMs', 100);
             const retentionMax = vscode.workspace.getConfiguration('redisInspector').get<number>('watchRetentionMaxResults', 1000);
+            this._resultRetentionLimit = retentionMax;
+            this._sendToWebview({
+                type: 'stateUpdate',
+                payload: {
+                    results: this._results,
+                    profiles: this._profiles,
+                    resultRetentionLimit: this._resultRetentionLimit,
+                },
+            });
 
             const opts = createSearchOptions({
                 streams: dto.streams,
@@ -408,21 +439,14 @@ export class MainPanelProvider implements vscode.Disposable {
     }
 
     private async _replay(hitIndices: number[]): Promise<void> {
-        const hits = hitIndices.map(i => this._results[i]).filter(Boolean);
+        const hits = hitIndices
+            .filter((index, position, indices) => Number.isInteger(index) && index >= 0 && index < this._results.length && indices.indexOf(index) === position)
+            .map((index) => this._results[index]);
         if (hits.length === 0) {
             vscode.window.showInformationMessage('No results to replay.');
             return;
         }
 
-        if (hits.length > 10) {
-            const confirm = await vscode.window.showWarningMessage(
-                `You are about to replay ${hits.length} messages. This could produce significant load on the target server. Continue?`,
-                'Yes', 'No'
-            );
-            if (confirm !== 'Yes') { return; }
-        }
-
-        // Open replay dialog to select target server
         const currentProfile = this._profiles.find(p => p.id === this._selectedProfileId);
         const targetProfile = await this._replayDialogProvider.openAsync(
             currentProfile,
@@ -430,12 +454,13 @@ export class MainPanelProvider implements vscode.Disposable {
             hits.length,
         );
 
-        if (!targetProfile) { return; } // User canceled
+        if (!targetProfile) { return; }
+        if (!await this._confirmReplayTarget(currentProfile, targetProfile, hits)) {
+            return;
+        }
 
         let redis: Redis | undefined;
         let tunnel: SshTunnel | undefined;
-        let sent = 0;
-        let failed = 0;
 
         this._cancel();
         this._cleanupConnection();
@@ -452,47 +477,28 @@ export class MainPanelProvider implements vscode.Disposable {
             this._sshTunnel = tunnel;
 
             this._sendToWebview({ type: 'statusUpdate', payload: { status: `Replaying ${hits.length} message(s)...`, statusType: 'connecting' } });
-
-            const batchSize = 50;
-            for (let index = 0; index < hits.length && !signal.aborted; index += batchSize) {
-                const batch = hits.slice(index, index + batchSize);
-                const pipeline = redis.pipeline();
-                for (const hit of batch) {
-                    const args: string[] = [];
-                    if (hit.fields) {
-                        for (const [key, value] of Object.entries(hit.fields)) {
-                            args.push(key, value);
-                        }
-                    }
-                    pipeline.xadd(hit.stream, '*', ...args);
-                }
-
-                const results = await pipeline.exec();
-                for (const result of results ?? []) {
-                    if (result[0]) {
-                        failed += 1;
-                    } else {
-                        sent += 1;
-                    }
-                }
-            }
-
-            if (signal.aborted) {
+            const report = await this._replayService.replayAsync(redis as never, hits, { batchSize: 50, signal });
+            if (report.canceled) {
                 this._sendToWebview({
                     type: 'statusUpdate',
-                    payload: { status: `Replay canceled after ${sent} success(es) and ${failed} failure(s)`, statusType: 'canceled' },
+                    payload: { status: `Replay canceled after ${report.succeeded} success(es) and ${report.failed} failure(s)`, statusType: 'canceled' },
                 });
-            } else if (failed > 0) {
+            } else if (report.failed > 0) {
                 this._sendToWebview({
                     type: 'statusUpdate',
-                    payload: { status: `Replay finished with ${sent} success(es) and ${failed} failure(s)`, statusType: 'error' },
+                    payload: { status: `Replay finished with ${report.succeeded} success(es) and ${report.failed} failure(s)`, statusType: 'error' },
                 });
+                this._outputChannel.appendLine(`Replay manifest: ${JSON.stringify(report.entries)}`);
             } else {
-                this._sendToWebview({ type: 'statusUpdate', payload: { status: `Replayed ${sent} message(s) to ${targetProfile.name}`, statusType: 'done' } });
+                this._sendToWebview({ type: 'statusUpdate', payload: { status: `Replayed ${report.succeeded} message(s) to ${targetProfile.name}`, statusType: 'done' } });
             }
         } catch (ex: unknown) {
+            const report = ex instanceof ReplayExecutionError ? ex.report : undefined;
             const msg = ex instanceof Error ? ex.message : String(ex);
-            this._outputChannel.appendLine(`Replay failed after ${sent} success(es): ${msg}`);
+            if (report) {
+                this._outputChannel.appendLine(`Replay partial manifest: ${JSON.stringify(report.entries)}`);
+            }
+            this._outputChannel.appendLine(`Replay failed after ${report?.succeeded ?? 0} success(es): ${msg}`);
             this._sendToWebview({ type: 'statusUpdate', payload: { status: `Replay failed: ${msg}`, statusType: 'error' } });
         } finally {
             this._cleanupConnection();
@@ -531,6 +537,39 @@ export class MainPanelProvider implements vscode.Disposable {
                 sshKeyPath: profile.sshKeyPath || undefined,
                 sshKeyPassphrase: sshKeyPassphrase || undefined,
                 sshHostKeyFingerprint: profile.sshHostKeyFingerprint || undefined,
+                hostKeyVerifier: async ({ host, port, fingerprint }) => {
+                    const decision = await verifySshHostKey({
+                        profileId: profile.id,
+                        host,
+                        port,
+                        fingerprint,
+                        getStoredFingerprint: (profileId) => this._connectionService.getStoredSshHostFingerprint(profileId),
+                        persistFingerprint: async (profileId, acceptedFingerprint) => {
+                            await this._connectionService.persistSshHostFingerprint(profileId, acceptedFingerprint);
+                            const inMemoryProfile = this._profiles.find((candidate) => candidate.id === profileId);
+                            if (inMemoryProfile) {
+                                inMemoryProfile.sshHostKeyFingerprint = acceptedFingerprint;
+                            }
+                        },
+                        confirmFingerprint: async ({ fingerprint: candidateFingerprint }) => {
+                            const choice = await vscode.window.showWarningMessage(
+                                `Trust SSH host ${host}:${port} with fingerprint ${candidateFingerprint}? This fingerprint will be saved for future connections.`,
+                                { modal: true },
+                                'Trust',
+                                'Cancel',
+                            );
+                            return choice === 'Trust';
+                        },
+                    });
+
+                    return {
+                        accepted: decision.accepted,
+                        trustedFingerprint: fingerprint,
+                        errorMessage: decision.reason === 'mismatch'
+                            ? `SSH host key mismatch for ${host}:${port}.`
+                            : 'SSH host fingerprint was not trusted.',
+                    };
+                },
                 remoteHost: endpoint.host,
                 remotePort: endpoint.port,
             });
@@ -572,6 +611,7 @@ export class MainPanelProvider implements vscode.Disposable {
             payload: {
                 results: this._results,
                 profiles: this._profiles,
+                resultRetentionLimit: this._resultRetentionLimit,
             },
         });
     }
@@ -602,6 +642,38 @@ export class MainPanelProvider implements vscode.Disposable {
 
     private _sendToWebview(msg: ExtensionToWebview): void {
         this._panel?.webview.postMessage(msg);
+    }
+
+    private _isKnownProfileId(profileId: string): boolean {
+        return this._profiles.some((profile) => profile.id === profileId);
+    }
+
+    private async _confirmReplayTarget(
+        currentProfile: ConnectionProfile | undefined,
+        targetProfile: ConnectionProfile,
+        hits: SearchHit[],
+    ): Promise<boolean> {
+        const targetEndpoint = parseRedisEndpoint(targetProfile.redisUrl).redactedUrl;
+        const uniqueStreams = Array.from(new Set(hits.map((hit) => hit.stream))).sort();
+        const currentTargetWarning = currentProfile?.id === targetProfile.id
+            ? 'Warning: the selected replay target is also the current source connection.'
+            : undefined;
+        const summary = [
+            `Replay ${hits.length} message(s) to ${targetProfile.name} [${getEnvironmentName(targetProfile.environment)}]?`,
+            `Endpoint: ${targetEndpoint}`,
+            `Source streams (${uniqueStreams.length}): ${uniqueStreams.join(', ')}`,
+            currentTargetWarning,
+            hits.length > 10
+                ? 'This replay is larger than 10 messages and may create significant load.'
+                : 'Replay writes immediately to the selected Redis server.',
+        ].filter(Boolean).join('\n');
+        const confirm = await vscode.window.showWarningMessage(
+            summary,
+            { modal: true },
+            'Replay',
+            'Cancel',
+        );
+        return confirm === 'Replay';
     }
 
     private _getHtmlForWebview(webview: vscode.Webview): string {

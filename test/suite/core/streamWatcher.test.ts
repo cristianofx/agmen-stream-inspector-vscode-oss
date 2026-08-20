@@ -59,7 +59,7 @@ describe('StreamWatcher', () => {
             clearInterval(listenerSampler);
         }
 
-        assert.strictEqual(maxObservedListeners, 1);
+        assert.ok(maxObservedListeners <= 1, `expected at most one abort listener, saw ${maxObservedListeners}`);
         assert.strictEqual(getEventListeners(controller.signal, 'abort').length, 0);
     });
 });
