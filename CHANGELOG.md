@@ -2,9 +2,27 @@
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-08-20
+
+### Added
+
+- Added SSH host-key verification with TOFU approval, SHA-256 pinning, and actionable mismatch errors.
+- Added bounded replay with cancellation and partial-delivery reporting.
+- Added a Reset Filters control for query, advanced-filter, and stream-filter criteria.
+
 ### Changed
 
 - Advanced filters now combine with the basic field filter using AND semantics.
+- Bundled JavaScript runtime dependencies while keeping `node_modules` out of the VSIX.
+- Kept optional SSH native accelerators external so the extension builds consistently across operating systems.
+- Added global result retention limits and retries for transient watch polling failures.
+- Preserved displayed results when Watch is canceled; results are cleared only for a new Find or Watch.
+
+### Fixed
+
+- Migrated credential-bearing Redis URLs out of persisted profile state and handled cleared secrets correctly.
+- Restored reliable connection-test error reporting and the default Redis URL for new connections.
+- Fixed sidebar rendering and result-row theming in the webview.
 
 ## [1.2.0] - 2026-08-19
 

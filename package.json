@@ -2,7 +2,7 @@
   "name": "agmen-stream-inspector",
   "displayName": "Agmen Stream Inspector for Redis",
   "description": "Free and open-source tools to inspect, search, monitor, and replay Redis Streams",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "publisher": "AgmenSoftware",
   "license": "MIT",
   "icon": "resources/icon.png",
