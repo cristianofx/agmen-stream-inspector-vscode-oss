@@ -59,6 +59,7 @@ export class SshTunnel {
             ? opts.localBindPort
             : await getFreeTcpPort(localHost);
         const trustedFingerprint = await resolveTrustedFingerprint(opts);
+        let hostKeyMismatch = false;
 
         const config: ConnectConfig = {
             host: opts.sshHost,
@@ -66,7 +67,13 @@ export class SshTunnel {
             username: opts.sshUser,
             readyTimeout: 10000,
             hostHash: 'sha256',
-            hostVerifier: (fingerprint: string) => fingerprint === stripFingerprintPrefix(trustedFingerprint),
+            hostVerifier: (fingerprint: string) => {
+                const accepted = fingerprint === stripFingerprintPrefix(trustedFingerprint);
+                if (!accepted) {
+                    hostKeyMismatch = true;
+                }
+                return accepted;
+            },
         };
 
         if (opts.sshPassword) {
@@ -83,7 +90,9 @@ export class SshTunnel {
 
         await new Promise<void>((resolve, reject) => {
             client.on('ready', () => resolve());
-            client.on('error', (err) => reject(err));
+            client.on('error', (err) => reject(hostKeyMismatch
+                ? new Error(`SSH host key mismatch for ${opts.sshHost}:${opts.sshPort}.`)
+                : err));
             client.connect(config);
         });
 
